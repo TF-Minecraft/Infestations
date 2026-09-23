@@ -5,9 +5,9 @@ import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.plugin.Plugin;
 
-import net.tfminecraft.InteractibleFurniture;
-import net.tfminecraft.furniture.Furniture;
-import net.tfminecraft.furniture.FurnitureType;
+import net.tfminecraft.interactiblefurniture.InteractibleFurniture;
+import net.tfminecraft.interactiblefurniture.furniture.Furniture;
+import net.tfminecraft.interactiblefurniture.furniture.FurnitureType;
 import net.tfminecraft.infestations.cache.Cache;
 import net.tfminecraft.infestations.infestation.Infestation;
 
