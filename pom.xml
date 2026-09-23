@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>net.tfminecraft</groupId>
+    <artifactId>infestations</artifactId>
+    <version>0.1.0</version>
+
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <tfmc.refs>D:/Dokumenter/My Plugins/Reference Libs</tfmc.refs>
+        <tfmc.builds>D:/Dokumenter/My Plugins/TFMC/Infestations</tfmc.builds>
+        <tfmc.tlibs>D:/Dokumenter/My Plugins/TFMC/TLibs</tfmc.tlibs>
+        <tfmc.simplefactions>D:/Dokumenter/My Plugins/TFMC/SimpleFactions</tfmc.simplefactions>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>spigot-api</artifactId>
+            <version>1.21.8</version>
+            <scope>system</scope>
+            <systemPath>${tfmc.refs}/spigot-api.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>TLibs</artifactId>
+            <version>1.0</version>
+            <scope>system</scope>
+            <systemPath>${tfmc.tlibs}/TLibs.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>SimpleFactions</artifactId>
+            <version>2.8.7</version>
+            <scope>system</scope>
+            <systemPath>${tfmc.simplefactions}/simplefactions-2.8.7.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>MythicMobs</artifactId>
+            <version>5.8.0</version>
+            <scope>system</scope>
+            <systemPath>${tfmc.refs}/MythicMobs-5.8.0-SNAPSHOT.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>ItemsAdder</artifactId>
+            <version>3.5.0</version>
+            <scope>system</scope>
+            <systemPath>${tfmc.refs}/ItemsAdder_3.5.0-r2.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>InteractibleFurniture</artifactId>
+            <version>0.1.3</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/../interactiblefurniture/target/interactiblefurniture-0.1.3-BETA.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>BungeeCord</artifactId>
+            <version>1.0</version>
+            <scope>system</scope>
+            <systemPath>${tfmc.refs}/BungeeCord.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals><goal>run</goal></goals>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${tfmc.builds}"/>
+                                <copy file="${project.build.directory}/${project.build.finalName}.jar"
+                                    tofile="${tfmc.builds}/${project.build.finalName}.jar"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

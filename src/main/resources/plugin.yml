@@ -1,0 +1,23 @@
+main: net.tfminecraft.infestations.Infestations
+api-version: '1.21'
+name: Infestations
+version: 0.1.0
+author: Drefvelin
+depend: [TLibs, SimpleFactions, MythicMobs, ItemsAdder, InteractibleFurniture]
+
+commands:
+  infestation:
+    description: Infestation admin commands
+    usage: /infestation <reload|set|clear|list>
+    aliases: [infestations]
+    permission: infestations.admin
+
+permissions:
+  infestations.admin:
+    description: Allows /infestation admin commands
+    default: op
+    children:
+      infestations.admin.reload: true
+  infestations.admin.reload:
+    description: Reload Infestations configs
+    default: op

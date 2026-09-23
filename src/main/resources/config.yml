@@ -1,0 +1,35 @@
+debug: false
+logging: false
+wipe-log: true
+
+# Neighbor spread. Keep false on the test server so set infestations stay put.
+# Can hop across a single water or sea tile, never onto water/sea, never two tiles.
+spread: false
+spread-interval-seconds: 600
+worsen-chance: 0.0015
+spread-chance-land:
+  mild: 0.00099
+  worrying: 0.0030
+  severe: 0.0050
+  extreme: 0.00694
+spread-chance-water:
+  mild: 0.00040
+  worrying: 0.0012
+  severe: 0.0020
+  extreme: 0.00278
+spread-chance-sea:
+  mild: 0.00015
+  worrying: 0.00045
+  severe: 0.00075
+  extreme: 0.00104
+
+lure-item: ia.tfmc:lure
+join-seconds: 20
+lure-spawn-radius: 48
+logout-grace-seconds: 300
+deserter-damage: 2
+hologram-view-range: 96
+
+skip-terrains:
+  - water
+  - sea

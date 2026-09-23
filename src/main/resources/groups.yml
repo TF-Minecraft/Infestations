@@ -1,0 +1,44 @@
+# Per-group Mythic list and severity numbers. display is player-facing (chat, map hover).
+# night-only: skip ambient and lure spawns unless world time is 13000-23000.
+# min-y: optional. Skip spawn spots with feet block Y below this (omitted = no floor).
+# terrains: optional list of SimpleFactions terrain names. Empty / omitted = any valid land.
+# If set, admin set and neighbor spread only land those types (still cannot infest skip-terrains).
+groups:
+  swamp_mobs:
+    display: Swamp Monsters
+    night-only: true
+    min-y: 56
+    terrains:
+      - bog
+    mobs:
+      - id: SwampGhoul
+        weight: 1
+    severity:
+      mild:
+        ambient-cap: 8
+        ambient-interval-ticks: 40
+        ambient-ring-min: 10
+        ambient-ring-max: 22
+        lure-count: 20
+        lure-duration-seconds: 120
+      worrying:
+        ambient-cap: 16
+        ambient-interval-ticks: 40
+        ambient-ring-min: 10
+        ambient-ring-max: 20
+        lure-count: 40
+        lure-duration-seconds: 120
+      severe:
+        ambient-cap: 28
+        ambient-interval-ticks: 30
+        ambient-ring-min: 9
+        ambient-ring-max: 19
+        lure-count: 60
+        lure-duration-seconds: 120
+      extreme:
+        ambient-cap: 40
+        ambient-interval-ticks: 20
+        ambient-ring-min: 8
+        ambient-ring-max: 18
+        lure-count: 80
+        lure-duration-seconds: 120
