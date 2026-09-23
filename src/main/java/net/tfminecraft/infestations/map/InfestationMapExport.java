@@ -13,7 +13,7 @@ import com.google.gson.JsonObject;
 
 import org.bukkit.Bukkit;
 
-import me.Plugins.SimpleFactions.REST.RestServer;
+import net.tfminecraft.simplefactions.rest.RestServer;
 import net.tfminecraft.infestations.Infestations;
 import net.tfminecraft.infestations.infestation.Infestation;
 import net.tfminecraft.infestations.loader.GroupLoader;

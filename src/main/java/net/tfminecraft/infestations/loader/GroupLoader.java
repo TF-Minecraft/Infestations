@@ -19,8 +19,8 @@ import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 
-import me.Plugins.SimpleFactions.enums.Terrain;
-import me.Plugins.TLibs.Interface.LoaderInterface;
+import net.tfminecraft.simplefactions.enums.Terrain;
+import net.tfminecraft.tlibs.interfaces.LoaderInterface;
 import net.tfminecraft.infestations.Infestations;
 import net.tfminecraft.infestations.infestation.Severity;
 import net.tfminecraft.infestations.utils.Provinces;

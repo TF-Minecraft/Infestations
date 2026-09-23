@@ -6,11 +6,11 @@ import java.util.Set;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 
-import me.Plugins.SimpleFactions.SimpleFactions;
-import me.Plugins.SimpleFactions.Map.ProvinceGrid;
-import me.Plugins.SimpleFactions.Map.Provinces.Province;
-import me.Plugins.SimpleFactions.REST.RestServer;
-import me.Plugins.SimpleFactions.enums.Terrain;
+import net.tfminecraft.simplefactions.SimpleFactions;
+import net.tfminecraft.simplefactions.map.ProvinceGrid;
+import net.tfminecraft.simplefactions.map.provinces.Province;
+import net.tfminecraft.simplefactions.rest.RestServer;
+import net.tfminecraft.simplefactions.enums.Terrain;
 import net.tfminecraft.infestations.cache.Cache;
 
 public final class Provinces {

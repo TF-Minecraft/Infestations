@@ -15,7 +15,7 @@ import net.tfminecraft.infestations.loader.ConfigLoader;
 import net.tfminecraft.infestations.loader.GroupLoader;
 
 /**
- * Province infestations. See docs/ for locked rules and batches.
+ * Province infestations. See the Docs project guide for behaviour and configuration.
  */
 public class Infestations extends JavaPlugin {
 
