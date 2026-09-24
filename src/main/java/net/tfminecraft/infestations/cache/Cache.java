@@ -23,6 +23,7 @@ public final class Cache {
     public static String lureItem = "ia.tfmc:lure";
     public static int joinSeconds = 20;
     public static int lureSpawnRadius = 48;
+    public static int minPlayerDistance = 16;
     public static int logoutGraceSeconds = 300;
     public static double deserterDamage = 2.0;
     public static double hologramViewRange = 96;

@@ -95,10 +95,11 @@ public final class InfestationDatabase {
         infestation.setLureZ(row.lureZ);
         infestation.setJoinEndsAt(row.joinEndsAt);
         infestation.setLureRemaining(row.lureRemaining);
-        infestation.setPendingSpawns(row.pendingSpawns);
+        // Scheduled spawns do not survive a restart or reload, so pendingSpawns starts at zero.
         infestation.setEnemiesAlive(row.enemiesAlive);
         infestation.setAmbientAlive(row.ambientAlive);
         infestation.setLureActivatedAt(row.lureActivatedAt);
+        infestation.setLureReleased(row.lureReleased);
         if (row.committed != null) {
             for (String id : row.committed) {
                 try {
@@ -142,6 +143,7 @@ public final class InfestationDatabase {
         row.enemiesAlive = infestation.getEnemiesAlive();
         row.ambientAlive = infestation.getAmbientAlive();
         row.lureActivatedAt = infestation.getLureActivatedAt();
+        row.lureReleased = infestation.getLureReleased();
         for (UUID id : infestation.getCommitted()) {
             row.committed.add(id.toString());
         }
