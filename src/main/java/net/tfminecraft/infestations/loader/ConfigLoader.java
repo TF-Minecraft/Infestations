@@ -43,6 +43,7 @@ public final class ConfigLoader implements LoaderInterface {
         Cache.lureItem = config.getString("lure-item", "ia.tfmc:lure");
         Cache.joinSeconds = Math.max(1, config.getInt("join-seconds", 20));
         Cache.lureSpawnRadius = Math.max(4, config.getInt("lure-spawn-radius", 48));
+        Cache.minPlayerDistance = Math.max(0, config.getInt("min-player-distance", 16));
         Cache.logoutGraceSeconds = Math.max(1, config.getInt("logout-grace-seconds", 300));
         Cache.deserterDamage = Math.max(0.5, config.getDouble("deserter-damage", 2.0));
         Cache.hologramViewRange = Math.max(16, config.getDouble("hologram-view-range", 96));

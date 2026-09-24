@@ -21,6 +21,7 @@ public class InfestationData {
     public int enemiesAlive;
     public int ambientAlive;
     public long lureActivatedAt;
+    public int lureReleased;
     public List<String> committed = new ArrayList<>();
     public Map<String, Long> logoutGraceUntil = new HashMap<>();
     public List<String> deathOnLogin = new ArrayList<>();

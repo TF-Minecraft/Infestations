@@ -18,6 +18,7 @@ import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.World;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -36,12 +37,16 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
+import org.bukkit.event.world.EntitiesLoadEvent;
+import org.bukkit.event.world.EntitiesUnloadEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitTask;
 
+import io.lumine.mythic.bukkit.events.MythicMobSpawnEvent;
+import io.lumine.mythic.core.mobs.ActiveMob;
 import net.md_5.bungee.api.ChatMessageType;
 import net.md_5.bungee.api.chat.TextComponent;
 
@@ -70,8 +75,16 @@ import net.tfminecraft.infestations.utils.Provinces;
 
 public final class InfestationManager implements Listener, AmbientSpawnService.CollectionInfestations {
 
+    /** Lure mobs are recounted this often, which also takes over ambient mobs loaded mid-lure. */
+    private static final int LURE_RECOUNT_TICKS = 100;
+    /** Wait after the last kill so death summons (parasitic worms after 20 ticks) can join the count. */
+    private static final int VICTORY_DELAY_TICKS = 40;
+    /** How long a dead tagged mob can still pass its tags to mobs it summons. */
+    private static final int DEATH_SUMMON_TICKS = 100;
+
     private final Infestations plugin;
     private final Map<Integer, Infestation> byProvince = new HashMap<>();
+    private final Map<UUID, RecentDeath> recentDeaths = new HashMap<>();
     private final AmbientSpawnService ambient = new AmbientSpawnService();
     private boolean pluginFurnitureRemove;
     private BukkitTask task;
@@ -187,6 +200,12 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                 }
             }
             if (infestation.getPhase() == LurePhase.ACTIVE) {
+                if (tickVictory(infestation)) {
+                    continue;
+                }
+                if (tick % LURE_RECOUNT_TICKS == 0) {
+                    recountLure(infestation);
+                }
                 warnNonJoiners(infestation);
                 spawnLureWave(infestation);
                 checkWipe(infestation);
@@ -198,6 +217,10 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         }
 
         tickSpread();
+
+        if (tick % 20 == 0 && !recentDeaths.isEmpty()) {
+            recentDeaths.values().removeIf(death -> tick - death.tick() > DEATH_SUMMON_TICKS);
+        }
 
         if (tick % 100 == 0) {
             save();
@@ -348,8 +371,67 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
     private void activate(Infestation infestation) {
         infestation.setPhase(LurePhase.ACTIVE);
         infestation.setLureActivatedAt(System.currentTimeMillis());
+        recountLure(infestation);
+        infestation.setLureReleased(infestation.getEnemiesAlive());
         spawnLureWave(infestation);
         save();
+    }
+
+    /**
+     * Count the province's loaded lure mobs and take over its ambient mobs, so mobs already roaming
+     * count toward the lure. The remaining count never drops below the mobs still in the field.
+     */
+    private void recountLure(Infestation infestation) {
+        Location origin = infestation.lureLocation();
+        if (origin == null || origin.getWorld() == null) {
+            return;
+        }
+        int provinceId = infestation.getProvinceId();
+        int alive = 0;
+        int adopted = 0;
+        for (LivingEntity entity : origin.getWorld().getLivingEntities()) {
+            if (entity instanceof Player || entity.isDead()) {
+                continue;
+            }
+            Integer tagged = Keys.infestationId(entity.getPersistentDataContainer());
+            if (tagged == null || tagged != provinceId) {
+                continue;
+            }
+            String kind = Keys.kind(entity.getPersistentDataContainer());
+            if (Keys.KIND_AMBIENT.equals(kind)) {
+                Keys.tagMob(entity.getPersistentDataContainer(), provinceId, Keys.KIND_LURE);
+                adopted++;
+            } else if (!Keys.KIND_LURE.equals(kind)) {
+                continue;
+            }
+            alive++;
+        }
+        infestation.setEnemiesAlive(alive);
+        infestation.setLureReleased(infestation.getLureReleased() + adopted);
+        int inField = alive + infestation.getPendingSpawns();
+        if (infestation.getLureRemaining() < inField) {
+            infestation.setLureRemaining(inField);
+        }
+        if (adopted > 0) {
+            SpawnLog.line(infestation, "-", "adopted " + adopted + " alive=" + alive
+                    + " remaining=" + infestation.getLureRemaining());
+        }
+    }
+
+    private boolean tickVictory(Infestation infestation) {
+        if (infestation.getLureRemaining() > 0) {
+            infestation.setVictoryAtTick(0);
+            return false;
+        }
+        if (infestation.getVictoryAtTick() == 0) {
+            infestation.setVictoryAtTick(tick + VICTORY_DELAY_TICKS);
+            return false;
+        }
+        if (tick < infestation.getVictoryAtTick()) {
+            return false;
+        }
+        victory(infestation);
+        return true;
     }
 
     private void spawnLureWave(Infestation infestation) {
@@ -375,21 +457,24 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         long elapsed = Math.max(0, System.currentTimeMillis() - started);
         long durationMs = tune.lureDurationSeconds() * 1000L;
         int lureCount = tune.lureCount();
-        int allowed = durationMs <= 0
-                ? lureCount
-                : (int) Math.min(lureCount, elapsed * lureCount / durationMs);
-        int killsDone = Math.max(0, lureCount - infestation.getLureRemaining());
-        int need = allowed - infestation.getPendingSpawns() - infestation.getEnemiesAlive() - killsDone;
+        // Everything left to kill should be in the field; lost mobs are replaced.
+        int need = infestation.getLureRemaining() - infestation.getEnemiesAlive() - infestation.getPendingSpawns();
+        if (durationMs > 0 && elapsed < durationMs) {
+            int allowed = (int) (elapsed * lureCount / durationMs);
+            need = Math.min(need, allowed - infestation.getLureReleased());
+        }
         if (need <= 0) {
             return;
         }
+        int ringMin = Math.max(4, Cache.minPlayerDistance);
         List<Location> spots = SpawnPlanner.find(
                 origin,
-                4,
-                Cache.lureSpawnRadius,
+                ringMin,
+                Math.max(Cache.lureSpawnRadius, ringMin + 8),
                 need,
-                loc -> Provinces.at(loc) == infestation.getProvinceId()
-                        && GroupLoader.allowsY(infestation.getGroupId(), loc.getBlockY()));
+                loc -> GroupLoader.allowsY(infestation.getGroupId(), loc.getBlockY())
+                        && SpawnPlanner.clearOfPlayers(loc, Cache.minPlayerDistance)
+                        && Provinces.at(loc) == infestation.getProvinceId());
         if (spots.isEmpty()) {
             infestation.setWaveRetryAtTick(tick + 40);
             SpawnLog.line(infestation, "-", "no-spot");
@@ -398,6 +483,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         infestation.setWaveRetryAtTick(0);
         for (Location spot : spots) {
             infestation.setPendingSpawns(infestation.getPendingSpawns() + 1);
+            infestation.setLureReleased(infestation.getLureReleased() + 1);
             int delay = ThreadLocalRandom.current().nextInt(20, 61);
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 if (infestation.getPhase() != LurePhase.ACTIVE) {
@@ -406,7 +492,14 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                 }
                 if (GroupLoader.blockedByNight(infestation.getGroupId(), spot.getWorld())) {
                     infestation.setPendingSpawns(Math.max(0, infestation.getPendingSpawns() - 1));
+                    infestation.setLureReleased(infestation.getLureReleased() - 1);
                     SpawnLog.line(infestation, "-", "night");
+                    return;
+                }
+                if (!SpawnPlanner.clearOfPlayers(spot, Cache.minPlayerDistance)) {
+                    infestation.setPendingSpawns(Math.max(0, infestation.getPendingSpawns() - 1));
+                    infestation.setLureReleased(infestation.getLureReleased() - 1);
+                    SpawnLog.line(infestation, "-", "too-close");
                     return;
                 }
                 LivingEntity spawned = MythicSpawner.spawn(
@@ -421,6 +514,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                             infestation.getEnemiesAlive(),
                             lureCount);
                 } else {
+                    infestation.setLureReleased(infestation.getLureReleased() - 1);
                     SpawnLog.line(infestation, "-", "unknown-mythic");
                 }
             }, delay);
@@ -840,6 +934,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         if (infestation == null) {
             return;
         }
+        recentDeaths.put(entity.getUniqueId(), new RecentDeath(provinceId, kind, tick));
         if (Keys.KIND_AMBIENT.equals(kind)) {
             if (infestation.getAmbientAlive() > 0) {
                 infestation.setAmbientAlive(infestation.getAmbientAlive() - 1);
@@ -851,11 +946,48 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                 infestation.setEnemiesAlive(infestation.getEnemiesAlive() - 1);
             }
             infestation.setLureRemaining(infestation.getLureRemaining() - 1);
-            if (infestation.getLureRemaining() <= 0) {
-                victory(infestation);
-            }
         }
     }
+
+    /**
+     * Mobs summoned by a dying infestation mob (parasitic worms) join its infestation. During a lure they
+     * add to the remaining count.
+     */
+    @EventHandler(ignoreCancelled = true)
+    public void onMythicSpawn(MythicMobSpawnEvent event) {
+        if (recentDeaths.isEmpty()) {
+            return;
+        }
+        ActiveMob mob = event.getMob();
+        // MythicMobs sets the summoner as parent after the spawn event.
+        Bukkit.getScheduler().runTask(plugin, () -> adoptSummon(mob));
+    }
+
+    private void adoptSummon(ActiveMob mob) {
+        UUID parentId = mob.getParentUUID().orElse(null);
+        RecentDeath death = parentId != null ? recentDeaths.get(parentId) : null;
+        if (death == null || mob.getEntity() == null) {
+            return;
+        }
+        if (!(mob.getEntity().getBukkitEntity() instanceof LivingEntity living) || living.isDead()) {
+            return;
+        }
+        Infestation infestation = get(death.provinceId());
+        if (infestation == null || Keys.infestationId(living.getPersistentDataContainer()) != null) {
+            return;
+        }
+        if (infestation.getPhase() == LurePhase.ACTIVE && Keys.KIND_LURE.equals(death.kind())) {
+            Keys.tagMob(living.getPersistentDataContainer(), death.provinceId(), Keys.KIND_LURE);
+            infestation.setEnemiesAlive(infestation.getEnemiesAlive() + 1);
+            infestation.setLureRemaining(infestation.getLureRemaining() + 1);
+            SpawnLog.line(infestation, "-", "summoned remaining=" + infestation.getLureRemaining());
+        } else if (infestation.getPhase() == LurePhase.NONE && Keys.KIND_AMBIENT.equals(death.kind())) {
+            Keys.tagMob(living.getPersistentDataContainer(), death.provinceId(), Keys.KIND_AMBIENT);
+            infestation.setAmbientAlive(infestation.getAmbientAlive() + 1);
+        }
+    }
+
+    private record RecentDeath(int provinceId, String kind, int tick) {}
 
     private void onPlayerDeath(Player player) {
         for (Infestation infestation : List.copyOf(byProvince.values())) {
@@ -945,7 +1077,6 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                 pluginFurnitureRemove = false;
             }
             LureHologram.removeOrphans(chunk);
-            ambient.onChunkLoaded(chunk, this);
             for (Infestation infestation : byProvince.values()) {
                 if (!infestation.hasLure()) {
                     continue;
@@ -956,6 +1087,30 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                 }
             }
         });
+    }
+
+    @EventHandler
+    public void onEntitiesLoad(EntitiesLoadEvent event) {
+        if (hasTagged(event.getEntities())) {
+            ambient.markDirty();
+        }
+    }
+
+    @EventHandler
+    public void onEntitiesUnload(EntitiesUnloadEvent event) {
+        if (hasTagged(event.getEntities())) {
+            ambient.markDirty();
+        }
+    }
+
+    private static boolean hasTagged(List<Entity> entities) {
+        for (Entity entity : entities) {
+            if (entity instanceof LivingEntity && !(entity instanceof Player)
+                    && Keys.infestationId(entity.getPersistentDataContainer()) != null) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void actionBar(Player player, String message) {

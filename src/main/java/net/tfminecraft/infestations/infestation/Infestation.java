@@ -28,6 +28,8 @@ public final class Infestation {
     private int ambientAlive;
     private int waveRetryAtTick;
     private long lureActivatedAt;
+    private int lureReleased;
+    private int victoryAtTick;
     private final Set<UUID> committed = new HashSet<>();
     private final Map<UUID, Long> logoutGraceUntil = new HashMap<>();
     private final Set<UUID> deathOnLogin = new HashSet<>();
@@ -117,6 +119,8 @@ public final class Infestation {
         this.deathOnLogin.clear();
         this.waveRetryAtTick = 0;
         this.lureActivatedAt = 0;
+        this.lureReleased = 0;
+        this.victoryAtTick = 0;
     }
 
     public void clearLure() {
@@ -134,6 +138,8 @@ public final class Infestation {
         deathOnLogin.clear();
         waveRetryAtTick = 0;
         lureActivatedAt = 0;
+        lureReleased = 0;
+        victoryAtTick = 0;
     }
 
     public String getWorldName() {
@@ -234,6 +240,26 @@ public final class Infestation {
 
     public void setLureActivatedAt(long lureActivatedAt) {
         this.lureActivatedAt = Math.max(0, lureActivatedAt);
+    }
+
+    /**
+     * Mobs the lure has put in the field against lure-count: its own spawns plus ambient mobs it took over.
+     * Summoned mobs are not counted, so they never delay the configured spawns.
+     */
+    public int getLureReleased() {
+        return lureReleased;
+    }
+
+    public void setLureReleased(int lureReleased) {
+        this.lureReleased = Math.max(0, lureReleased);
+    }
+
+    public int getVictoryAtTick() {
+        return victoryAtTick;
+    }
+
+    public void setVictoryAtTick(int victoryAtTick) {
+        this.victoryAtTick = Math.max(0, victoryAtTick);
     }
 
     public int ambientCap() {

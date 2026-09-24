@@ -7,15 +7,14 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.bukkit.Bukkit;
-import org.bukkit.Chunk;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.World;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 
 import net.tfminecraft.infestations.Infestations;
+import net.tfminecraft.infestations.cache.Cache;
 import net.tfminecraft.infestations.infestation.Infestation;
 import net.tfminecraft.infestations.infestation.LurePhase;
 import net.tfminecraft.infestations.loader.GroupLoader;
@@ -24,9 +23,18 @@ import net.tfminecraft.infestations.utils.Provinces;
 
 public final class AmbientSpawnService {
 
+    /** Minimum ticks between recounts triggered by tagged mobs loading or unloading. */
+    private static final int RECOUNT_INTERVAL_TICKS = 100;
+
     private final Map<UUID, Integer> lastSpawnTick = new HashMap<>();
+    private boolean recountDirty;
+    private int lastRecountTick;
 
     public void tick(CollectionInfestations infestations, int tick) {
+        if (recountDirty && tick - lastRecountTick >= RECOUNT_INTERVAL_TICKS) {
+            recountAmbient(infestations);
+            lastRecountTick = tick;
+        }
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) {
                 continue;
@@ -65,13 +73,16 @@ public final class AmbientSpawnService {
         UUID playerId = player.getUniqueId();
         String playerName = player.getName();
         int provinceId = infestation.getProvinceId();
+        int ringMin = Math.max(tune.ambientRingMin(), Cache.minPlayerDistance);
+        int ringMax = Math.max(tune.ambientRingMax(), ringMin + 8);
         List<Location> spots = SpawnPlanner.find(
                 player.getLocation(),
-                tune.ambientRingMin(),
-                tune.ambientRingMax(),
+                ringMin,
+                ringMax,
                 want,
-                loc -> Provinces.at(loc) == provinceId
-                        && GroupLoader.allowsY(infestation.getGroupId(), loc.getBlockY()));
+                loc -> GroupLoader.allowsY(infestation.getGroupId(), loc.getBlockY())
+                        && SpawnPlanner.clearOfPlayers(loc, Cache.minPlayerDistance)
+                        && Provinces.at(loc) == provinceId);
         if (spots.isEmpty()) {
             SpawnLog.line(infestation, playerName, "no-spot");
             return;
@@ -104,6 +115,10 @@ public final class AmbientSpawnService {
                     SpawnLog.line(infestation, playerName, "no-spot");
                     return;
                 }
+                if (!SpawnPlanner.clearOfPlayers(spot, Cache.minPlayerDistance)) {
+                    SpawnLog.line(infestation, playerName, "too-close");
+                    return;
+                }
                 LivingEntity spawned = MythicSpawner.spawn(
                         spot, infestation.getGroupId(), infestation.getProvinceId(), Keys.KIND_AMBIENT);
                 if (spawned != null) {
@@ -117,49 +132,36 @@ public final class AmbientSpawnService {
     }
 
     /**
-     * Set ambientAlive from loaded chunks. Does not despawn anything.
+     * Set ambientAlive from loaded entities. Does not despawn anything.
      */
     public void reconcileLoaded(CollectionInfestations infestations) {
         recountAmbient(infestations);
     }
 
-    public void onChunkLoaded(Chunk chunk, CollectionInfestations infestations) {
-        if (hasTagged(chunk)) {
-            recountAmbient(infestations);
-        }
-    }
-
-    private boolean hasTagged(Chunk chunk) {
-        for (Entity entity : chunk.getEntities()) {
-            if (!(entity instanceof LivingEntity living) || living instanceof Player) {
-                continue;
-            }
-            if (Keys.infestationId(living.getPersistentDataContainer()) != null) {
-                return true;
-            }
-        }
-        return false;
+    /**
+     * Tagged mobs loaded or unloaded with their chunk; recount on a later tick, at most every few seconds.
+     */
+    public void markDirty() {
+        recountDirty = true;
     }
 
     private void recountAmbient(CollectionInfestations infestations) {
+        recountDirty = false;
         Map<Integer, Integer> counts = new HashMap<>();
         for (World world : Bukkit.getWorlds()) {
-            for (Chunk chunk : world.getLoadedChunks()) {
-                for (Entity entity : chunk.getEntities()) {
-                    if (!(entity instanceof LivingEntity living) || living instanceof Player) {
-                        continue;
-                    }
-                    Integer id = Keys.infestationId(living.getPersistentDataContainer());
-                    String kind = Keys.kind(living.getPersistentDataContainer());
-                    if (id == null || !Keys.KIND_AMBIENT.equals(kind)) {
-                        continue;
-                    }
-                    Infestation infestation = infestations.get(id);
-                    if (infestation == null || infestation.getPhase() != LurePhase.NONE) {
-                        continue;
-                    }
-                    counts.merge(id, 1, Integer::sum);
+            for (LivingEntity living : world.getLivingEntities()) {
+                if (living instanceof Player || living.isDead()) {
+                    continue;
                 }
+                Integer id = Keys.infestationId(living.getPersistentDataContainer());
+                if (id == null || !Keys.KIND_AMBIENT.equals(Keys.kind(living.getPersistentDataContainer()))) {
+                    continue;
+                }
+                Infestation infestation = infestations.get(id);
+                if (infestation == null || infestation.getPhase() != LurePhase.NONE) {
+                    continue;
+                }
+                counts.merge(id, 1, Integer::sum);
             }
         }
         for (Infestation infestation : infestations.all()) {

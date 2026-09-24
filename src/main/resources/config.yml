@@ -26,6 +26,9 @@ spread-chance-sea:
 lure-item: ia.tfmc:lure
 join-seconds: 20
 lure-spawn-radius: 48
+# No ambient or lure mob spawns closer than this to any player. Raises the
+# ambient ring minimum and the lure ring minimum when they are smaller.
+min-player-distance: 16
 logout-grace-seconds: 300
 deserter-damage: 2
 hologram-view-range: 96
