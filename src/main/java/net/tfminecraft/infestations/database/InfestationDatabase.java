@@ -99,7 +99,8 @@ public final class InfestationDatabase {
         infestation.setEnemiesAlive(row.enemiesAlive);
         infestation.setAmbientAlive(row.ambientAlive);
         infestation.setLureActivatedAt(row.lureActivatedAt);
-        infestation.setLureReleased(row.lureReleased);
+        // Pending spawns were counted as released when scheduled but never ran.
+        infestation.setLureReleased(row.lureReleased - row.pendingSpawns);
         if (row.committed != null) {
             for (String id : row.committed) {
                 try {
