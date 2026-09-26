@@ -15,9 +15,10 @@ commits to the fight, and defeats every monster the lure draws in.
   night-only, minimum-height, and terrain rules.
 - **Lure raids** — an InteractibleFurniture lure opens a join window, then
   releases a paced wave; defeating the full wave clears the infestation.
-- **Committed parties** — leaving the province or losing the whole party fails
-  the lure, bystanders are warned and damaged, and logged-out players get a
-  grace period.
+- **Committed parties** — a committed player who leaves the province takes
+  damage until `/lure leave` drops them from the fight. Losing the whole party
+  fails the lure, bystanders who stay are warned and damaged, and logged-out
+  players get a grace period.
 - **Optional spread** — idle infestations can worsen and spread to neighbouring
   land, including across a single water or sea province.
 - **Map and persistence** — infestation severity is exported to the

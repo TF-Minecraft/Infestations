@@ -11,6 +11,9 @@ commands:
     usage: /infestation <reload|set|clear|list>
     aliases: [infestations]
     permission: infestations.admin
+  lure:
+    description: Leave a lure you have joined
+    usage: /lure leave
 
 permissions:
   infestations.admin:

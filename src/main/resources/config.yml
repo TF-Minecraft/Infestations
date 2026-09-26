@@ -30,6 +30,8 @@ lure-spawn-radius: 48
 # ambient ring minimum and the lure ring minimum when they are smaller.
 min-player-distance: 16
 logout-grace-seconds: 300
+# Hearts are 2 health. Applied each second to uncommitted players who stay
+# after a lure starts, and to committed players who leave the province.
 deserter-damage: 2
 hologram-view-range: 96
 

@@ -26,6 +26,9 @@ public final class CommandManager implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (command.getName().equalsIgnoreCase("lure")) {
+            return handleLure(sender, args);
+        }
         if (args.length == 0) {
             if (!sender.hasPermission("infestations.admin")
                     && !sender.hasPermission("infestations.admin.reload")) {
@@ -53,6 +56,21 @@ public final class CommandManager implements CommandExecutor, TabCompleter {
             case "clear" -> handleClear(sender, args);
             case "list" -> handleList(sender);
             default -> sender.sendMessage(Messages.get("unknown-subcommand"));
+        }
+        return true;
+    }
+
+    private boolean handleLure(CommandSender sender, String[] args) {
+        if (args.length != 1 || !args[0].equalsIgnoreCase("leave")) {
+            sender.sendMessage(Messages.get("lure-usage"));
+            return true;
+        }
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Messages.get("player-only"));
+            return true;
+        }
+        if (!Infestations.plugin.getInfestationManager().leaveLure(player)) {
+            player.sendMessage(Messages.get("lure-not-in"));
         }
         return true;
     }
@@ -155,6 +173,12 @@ public final class CommandManager implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        if (command.getName().equalsIgnoreCase("lure")) {
+            if (args.length == 1) {
+                return prefix(List.of("leave"), args[0]);
+            }
+            return List.of();
+        }
         if (args.length == 1) {
             List<String> options = new ArrayList<>();
             if (sender.hasPermission("infestations.admin.reload")) {
