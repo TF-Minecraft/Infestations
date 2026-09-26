@@ -39,13 +39,8 @@ public class Infestations extends JavaPlugin {
         getServer().getPluginManager().registerEvents(infestationManager, this);
         infestationManager.start();
 
-        var cmd = getCommand("infestation");
-        if (cmd != null) {
-            cmd.setExecutor(commandManager);
-            cmd.setTabCompleter(commandManager);
-        } else {
-            getLogger().severe("Command 'infestation' missing from plugin.yml");
-        }
+        registerCommand("infestation");
+        registerCommand("lure");
 
         getLogger().info("Infestations enabled.");
     }
@@ -60,6 +55,16 @@ public class Infestations extends JavaPlugin {
 
     public InfestationManager getInfestationManager() {
         return infestationManager;
+    }
+
+    private void registerCommand(String name) {
+        var cmd = getCommand(name);
+        if (cmd != null) {
+            cmd.setExecutor(commandManager);
+            cmd.setTabCompleter(commandManager);
+        } else {
+            getLogger().severe("Command '" + name + "' missing from plugin.yml");
+        }
     }
 
     public boolean reloadAll() {

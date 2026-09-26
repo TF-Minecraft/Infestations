@@ -213,7 +213,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             if (infestation.hasLure()) {
                 LureHologram.tick(infestation);
             }
-            tickDeserters(infestation);
+            tickOutsideCommitted(infestation);
         }
 
         tickSpread();
@@ -560,21 +560,61 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         }
     }
 
-    private void tickDeserters(Infestation infestation) {
+    private void tickOutsideCommitted(Infestation infestation) {
         if (tick % 20 != 0 || infestation.getPhase() == LurePhase.NONE) {
             return;
         }
+        String bar = Messages.get("lure-outside-bar");
         for (UUID id : List.copyOf(infestation.getCommitted())) {
             Player player = Bukkit.getPlayer(id);
             if (player == null || !player.isOnline() || player.isDead()) {
                 continue;
             }
+            if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) {
+                continue;
+            }
             if (Provinces.at(player) == infestation.getProvinceId()) {
                 continue;
             }
-            failLure(infestation);
-            return;
+            actionBar(player, bar);
+            player.damage(Cache.deserterDamage);
+            if (tick % 100 == 0) {
+                player.sendMessage(Messages.get("lure-outside"));
+            }
         }
+    }
+
+    /**
+     * Drop a committed player out of every lure. The lure fails only when nobody committed remains.
+     *
+     * @return true when the player was committed to at least one lure
+     */
+    public boolean leaveLure(Player player) {
+        UUID id = player.getUniqueId();
+        boolean found = false;
+        for (Infestation infestation : List.copyOf(byProvince.values())) {
+            if (!infestation.isCommitted(id)) {
+                continue;
+            }
+            if (!found) {
+                player.sendMessage(Messages.get("lure-left"));
+            }
+            found = true;
+            boolean inProvince = Provinces.at(player) == infestation.getProvinceId();
+            infestation.getCommitted().remove(id);
+            infestation.getLogoutGraceUntil().remove(id);
+            infestation.getDeathOnLogin().remove(id);
+            if (infestation.getPhase() != LurePhase.NONE && !hasLivingOrGrace(infestation)) {
+                failLure(infestation);
+                if (!inProvince) {
+                    player.sendMessage(Messages.get("lure-fail"));
+                }
+            }
+        }
+        if (found) {
+            save();
+        }
+        return found;
     }
 
     private void expireGrace(Infestation infestation, long now) {
@@ -1044,9 +1084,14 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         if (infestation.getPhase() == LurePhase.NONE) {
             return;
         }
-        if (infestation.isCommitted(event.getPlayer().getUniqueId())) {
-            failLure(infestation);
+        Player player = event.getPlayer();
+        if (!infestation.isCommitted(player.getUniqueId())) {
+            return;
         }
+        if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) {
+            return;
+        }
+        player.sendMessage(Messages.get("lure-outside"));
     }
 
     @EventHandler
