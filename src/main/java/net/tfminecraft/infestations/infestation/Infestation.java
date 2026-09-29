@@ -243,8 +243,10 @@ public final class Infestation {
     }
 
     /**
-     * Mobs the lure has put in the field against lure-count: its own spawns plus ambient mobs it took over.
-     * Summoned mobs are not counted, so they never delay the configured spawns.
+     * Mobs the lure has put in the field: its own spawns plus ambient mobs it took over.
+     * Summoned mobs are not counted, so they never delay the configured spawns. The pace waits on
+     * this tally before introducing more, but a tally ahead of the mobs actually alive or pending
+     * cannot leave the lure empty while enemies remain.
      */
     public int getLureReleased() {
         return lureReleased;

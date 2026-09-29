@@ -1,5 +1,6 @@
 package net.tfminecraft.infestations.infestation;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -68,6 +69,7 @@ import net.tfminecraft.infestations.lure.LureHologram;
 import net.tfminecraft.infestations.map.InfestationMapExport;
 import net.tfminecraft.infestations.spawn.AmbientSpawnService;
 import net.tfminecraft.infestations.spawn.Keys;
+import net.tfminecraft.infestations.spawn.LureSpawnQuota;
 import net.tfminecraft.infestations.spawn.MythicSpawner;
 import net.tfminecraft.infestations.spawn.SpawnLog;
 import net.tfminecraft.infestations.spawn.SpawnPlanner;
@@ -457,31 +459,40 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         long elapsed = Math.max(0, System.currentTimeMillis() - started);
         long durationMs = tune.lureDurationSeconds() * 1000L;
         int lureCount = tune.lureCount();
-        // Everything left to kill should be in the field; lost mobs are replaced.
-        int need = infestation.getLureRemaining() - infestation.getEnemiesAlive() - infestation.getPendingSpawns();
-        if (durationMs > 0 && elapsed < durationMs) {
-            int allowed = (int) (elapsed * lureCount / durationMs);
-            need = Math.min(need, allowed - infestation.getLureReleased());
-        }
+        // Headcount follows the clock. Earlier release attempts cannot freeze a lure that still owes mobs.
+        int need = LureSpawnQuota.toSpawn(
+                infestation.getLureRemaining(),
+                infestation.getEnemiesAlive(),
+                infestation.getPendingSpawns(),
+                infestation.getLureReleased(),
+                elapsed,
+                durationMs,
+                lureCount);
         if (need <= 0) {
             return;
         }
-        int ringMin = Math.max(4, Cache.minPlayerDistance);
-        List<Location> spots = SpawnPlanner.find(
-                origin,
-                ringMin,
-                Math.max(Cache.lureSpawnRadius, ringMin + 8),
-                need,
-                loc -> GroupLoader.allowsY(infestation.getGroupId(), loc.getBlockY())
-                        && SpawnPlanner.clearOfPlayers(loc, Cache.minPlayerDistance)
-                        && Provinces.at(loc) == infestation.getProvinceId());
+        List<LureSpot> spots = planLureSpots(infestation, origin, need);
         if (spots.isEmpty()) {
             infestation.setWaveRetryAtTick(tick + 40);
             SpawnLog.line(infestation, "-", "no-spot");
             return;
         }
         infestation.setWaveRetryAtTick(0);
-        for (Location spot : spots) {
+        int loose = 0;
+        int anchored = 0;
+        for (LureSpot spot : spots) {
+            if (spot.anchor()) {
+                anchored++;
+            } else if (spot.forced()) {
+                loose++;
+            }
+        }
+        if (anchored > 0) {
+            SpawnLog.line(infestation, "-", "anchor " + anchored);
+        } else if (loose > 0) {
+            SpawnLog.line(infestation, "-", "loose " + loose);
+        }
+        for (LureSpot planned : spots) {
             infestation.setPendingSpawns(infestation.getPendingSpawns() + 1);
             infestation.setLureReleased(infestation.getLureReleased() + 1);
             int delay = ThreadLocalRandom.current().nextInt(20, 61);
@@ -490,17 +501,23 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                     infestation.setPendingSpawns(Math.max(0, infestation.getPendingSpawns() - 1));
                     return;
                 }
+                Location spot = planned.location();
                 if (GroupLoader.blockedByNight(infestation.getGroupId(), spot.getWorld())) {
                     infestation.setPendingSpawns(Math.max(0, infestation.getPendingSpawns() - 1));
                     infestation.setLureReleased(infestation.getLureReleased() - 1);
                     SpawnLog.line(infestation, "-", "night");
                     return;
                 }
-                if (!SpawnPlanner.clearOfPlayers(spot, Cache.minPlayerDistance)) {
-                    infestation.setPendingSpawns(Math.max(0, infestation.getPendingSpawns() - 1));
-                    infestation.setLureReleased(infestation.getLureReleased() - 1);
-                    SpawnLog.line(infestation, "-", "too-close");
-                    return;
+                if (!planned.forced() && !SpawnPlanner.clearOfPlayers(spot, Cache.minPlayerDistance)) {
+                    Location anchor = SpawnPlanner.anchor(origin);
+                    if (anchor == null) {
+                        infestation.setPendingSpawns(Math.max(0, infestation.getPendingSpawns() - 1));
+                        infestation.setLureReleased(infestation.getLureReleased() - 1);
+                        SpawnLog.line(infestation, "-", "too-close");
+                        return;
+                    }
+                    spot = anchor;
+                    SpawnLog.line(infestation, "-", "too-close-anchor");
                 }
                 LivingEntity spawned = MythicSpawner.spawn(
                         spot, infestation.getGroupId(), infestation.getProvinceId(), Keys.KIND_LURE);
@@ -520,6 +537,50 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             }, delay);
         }
     }
+
+    /**
+     * Prefer a clear ring away from players. When that cannot hold every owed mob, loosen the space,
+     * then stand the rest on the lure so a failed search cannot leave the remaining count unpaid.
+     */
+    private List<LureSpot> planLureSpots(Infestation infestation, Location origin, int need) {
+        int ringMin = Math.max(4, Cache.minPlayerDistance);
+        int ringMax = Math.max(Cache.lureSpawnRadius, ringMin + 8);
+        int provinceId = infestation.getProvinceId();
+        List<LureSpot> planned = new ArrayList<>();
+        for (Location spot : SpawnPlanner.find(
+                origin,
+                ringMin,
+                ringMax,
+                need,
+                loc -> GroupLoader.allowsY(infestation.getGroupId(), loc.getBlockY())
+                        && SpawnPlanner.clearOfPlayers(loc, Cache.minPlayerDistance)
+                        && Provinces.at(loc) == provinceId)) {
+            planned.add(new LureSpot(spot, false, false));
+        }
+        if (planned.size() < need) {
+            int missing = need - planned.size();
+            for (Location spot : SpawnPlanner.findLoose(
+                    origin,
+                    4,
+                    ringMax,
+                    missing,
+                    loc -> GroupLoader.allowsY(infestation.getGroupId(), loc.getBlockY())
+                            && Provinces.at(loc) == provinceId)) {
+                planned.add(new LureSpot(spot, true, false));
+            }
+        }
+        if (planned.size() < need) {
+            Location anchor = SpawnPlanner.anchor(origin);
+            if (anchor != null) {
+                while (planned.size() < need) {
+                    planned.add(new LureSpot(anchor.clone(), true, true));
+                }
+            }
+        }
+        return planned;
+    }
+
+    private record LureSpot(Location location, boolean forced, boolean anchor) {}
 
     private void warnJoining(Infestation infestation) {
         if (tick % 20 != 0) {
