@@ -12,19 +12,68 @@ import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 
 /**
- * Random spots in a ring: 3x3x3 air over a 3x3 solid floor. Sampling is capped
- * per spot and never touches unloaded chunks, so a failed search stays cheap.
+ * Random spots in a ring. The strict search wants 3x3x3 air over a 3x3 solid floor; the loose search
+ * wants two air blocks over one solid block and a taller column. Sampling is capped per spot and never
+ * touches unloaded chunks, so a failed search stays cheap. {@link #anchor} always returns a spot at the
+ * origin when a lure still owes mobs and the ring has nowhere to put them.
  */
 public final class SpawnPlanner {
 
     private static final int ATTEMPTS_PER_SPOT = 24;
     private static final int MIN_ATTEMPTS = 48;
     private static final double MIN_SPOT_GAP_SQ = 4.0;
+    private static final int STRICT_VERTICAL = 2;
+    private static final int LOOSE_VERTICAL = 12;
 
     private SpawnPlanner() {}
 
     public static List<Location> find(Location origin, int ringMin, int ringMax, int max,
             Predicate<Location> extra) {
+        return sample(origin, ringMin, ringMax, max, extra, STRICT_VERTICAL, true);
+    }
+
+    /**
+     * Same ring, but a single column of air over a solid block and a wider height band.
+     */
+    public static List<Location> findLoose(Location origin, int ringMin, int ringMax, int max,
+            Predicate<Location> extra) {
+        return sample(origin, ringMin, ringMax, max, extra, LOOSE_VERTICAL, false);
+    }
+
+    /**
+     * A place to stand at the origin. Used when the ring cannot take the mobs a lure still owes.
+     * Prefers two air blocks over a solid floor near the origin, and still returns the block above
+     * the origin when nothing around it is clear.
+     */
+    public static Location anchor(Location origin) {
+        if (origin == null || origin.getWorld() == null) {
+            return null;
+        }
+        World world = origin.getWorld();
+        int x = origin.getBlockX();
+        int y = origin.getBlockY();
+        int z = origin.getBlockZ();
+        if (world.isChunkLoaded(x >> 4, z >> 4)) {
+            for (int radius = 0; radius <= 3; radius++) {
+                for (int dy = 1; dy <= 6; dy++) {
+                    Location found = standInSquare(world, x, y + dy, z, radius);
+                    if (found != null) {
+                        return found;
+                    }
+                }
+                for (int dy = 0; dy >= -4; dy--) {
+                    Location found = standInSquare(world, x, y + dy, z, radius);
+                    if (found != null) {
+                        return found;
+                    }
+                }
+            }
+        }
+        return origin.clone().add(0, 1, 0);
+    }
+
+    private static List<Location> sample(Location origin, int ringMin, int ringMax, int max,
+            Predicate<Location> extra, int vertical, boolean roomy) {
         List<Location> results = new ArrayList<>(Math.max(0, max));
         if (origin == null || max <= 0) {
             return results;
@@ -52,8 +101,8 @@ public final class SpawnPlanner {
             if (!areaLoaded(world, x, z)) {
                 continue;
             }
-            for (int y = baseY - 2; y <= baseY + 2; y++) {
-                if (!is3x3x3ClearAir(world, x, y, z) || !is3x3FloorSolid(world, x, y - 1, z)) {
+            for (int y = baseY - vertical; y <= baseY + vertical; y++) {
+                if (!clear(world, x, y, z, roomy)) {
                     continue;
                 }
                 Location loc = new Location(world, x + 0.5, y, z + 0.5);
@@ -65,6 +114,36 @@ public final class SpawnPlanner {
             }
         }
         return results;
+    }
+
+    private static Location standInSquare(World world, int x, int y, int z, int radius) {
+        for (int ox = -radius; ox <= radius; ox++) {
+            for (int oz = -radius; oz <= radius; oz++) {
+                if (Math.max(Math.abs(ox), Math.abs(oz)) != radius) {
+                    continue;
+                }
+                if (!areaLoaded(world, x + ox, z + oz) || !isStandable(world, x + ox, y, z + oz)) {
+                    continue;
+                }
+                return new Location(world, x + ox + 0.5, y, z + oz + 0.5);
+            }
+        }
+        return null;
+    }
+
+    private static boolean clear(World world, int x, int y, int z, boolean roomy) {
+        if (!columnInWorld(world, y, roomy)) {
+            return false;
+        }
+        if (roomy) {
+            return is3x3x3ClearAir(world, x, y, z) && is3x3FloorSolid(world, x, y - 1, z);
+        }
+        return isStandable(world, x, y, z);
+    }
+
+    private static boolean columnInWorld(World world, int y, boolean roomy) {
+        int top = y + (roomy ? 2 : 1);
+        return y - 1 >= world.getMinHeight() && top < world.getMaxHeight();
     }
 
     /**
@@ -100,6 +179,16 @@ public final class SpawnPlanner {
             }
         }
         return false;
+    }
+
+    private static boolean isStandable(World world, int x, int y, int z) {
+        if (!columnInWorld(world, y, false)) {
+            return false;
+        }
+        Block feet = world.getBlockAt(x, y, z);
+        Block head = world.getBlockAt(x, y + 1, z);
+        Block floor = world.getBlockAt(x, y - 1, z);
+        return feet.getType().isAir() && head.getType().isAir() && floor.getType().isSolid();
     }
 
     private static boolean is3x3x3ClearAir(World world, int x, int y, int z) {
