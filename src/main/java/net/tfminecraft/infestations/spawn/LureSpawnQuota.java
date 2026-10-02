@@ -1,5 +1,7 @@
 package net.tfminecraft.infestations.spawn;
 
+import java.math.BigInteger;
+
 /**
  * How many lure mobs to put in the field on this attempt.
  *
@@ -19,29 +21,26 @@ public final class LureSpawnQuota {
             long elapsedMs,
             long durationMs,
             int lureCount) {
-        int inField = Math.max(0, alive) + Math.max(0, pending);
-        int shortfall = Math.max(0, remaining) - inField;
+        long inField = (long) Math.max(0, alive) + Math.max(0, pending);
+        long shortfall = Math.max(0, remaining) - inField;
         if (shortfall <= 0) {
             return 0;
         }
         if (lureCount <= 0 || durationMs <= 0 || elapsedMs >= durationMs) {
-            return shortfall;
+            return (int) shortfall;
         }
-        long allowed = Math.max(0, elapsedMs) * (long) lureCount / durationMs;
-        if (allowed < 1) {
-            allowed = 1;
-        }
-        if (allowed > Integer.MAX_VALUE) {
-            allowed = Integer.MAX_VALUE;
-        }
-        int paceRoom = (int) allowed - Math.max(0, released);
-        int clockTarget = (int) Math.min(Math.max(0, remaining), allowed);
+        // The product can exceed long, although elapsed < duration bounds the quotient below lureCount.
+        int allowed = Math.max(1, BigInteger.valueOf(Math.max(0, elapsedMs))
+                .multiply(BigInteger.valueOf(lureCount))
+                .divide(BigInteger.valueOf(durationMs)).intValueExact());
+        long paceRoom = (long) allowed - Math.max(0, released);
+        int clockTarget = Math.min(Math.max(0, remaining), allowed);
         if (paceRoom < 0 && inField < clockTarget) {
             paceRoom = clockTarget - inField;
         }
         if (paceRoom <= 0) {
             return 0;
         }
-        return Math.min(shortfall, paceRoom);
+        return (int) Math.min(shortfall, paceRoom);
     }
 }

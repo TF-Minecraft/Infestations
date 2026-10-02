@@ -177,8 +177,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
     }
 
     private static boolean sameLureBlock(Infestation a, Infestation b) {
-        return a.getWorldName() != null
-                && a.getWorldName().equals(b.getWorldName())
+        return a.getWorldName().equals(b.getWorldName())
                 && java.util.Objects.equals(a.getLureX(), b.getLureX())
                 && java.util.Objects.equals(a.getLureY(), b.getLureY())
                 && java.util.Objects.equals(a.getLureZ(), b.getLureZ());
@@ -385,7 +384,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
      */
     private void recountLure(Infestation infestation) {
         Location origin = infestation.lureLocation();
-        if (origin == null || origin.getWorld() == null) {
+        if (origin == null) {
             return;
         }
         int provinceId = infestation.getProvinceId();
@@ -492,12 +491,16 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         } else if (loose > 0) {
             SpawnLog.line(infestation, "-", "loose " + loose);
         }
+        long lureGeneration = infestation.getLureGeneration();
         for (LureSpot planned : spots) {
             infestation.setPendingSpawns(infestation.getPendingSpawns() + 1);
             infestation.setLureReleased(infestation.getLureReleased() + 1);
             int delay = ThreadLocalRandom.current().nextInt(20, 61);
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                if (infestation.getPhase() != LurePhase.ACTIVE) {
+                if (infestation.getLureGeneration() != lureGeneration) {
+                    return;
+                }
+                if (get(infestation.getProvinceId()) != infestation || infestation.getPhase() != LurePhase.ACTIVE) {
                     infestation.setPendingSpawns(Math.max(0, infestation.getPendingSpawns() - 1));
                     return;
                 }
@@ -726,7 +729,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         infestation.clearLure();
         ambient.reconcileLoaded(this);
         save();
-        if (loc != null && loc.getWorld() != null) {
+        if (loc != null) {
             loc.getWorld().playSound(loc, Sound.ENTITY_WITHER_SPAWN, 0.4f, 1.4f);
         }
         for (Player player : Bukkit.getOnlinePlayers()) {
@@ -740,7 +743,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         Location loc = infestation.lureLocation();
         int provinceId = infestation.getProvinceId();
         destroyLure(infestation, true);
-        if (loc != null && loc.getWorld() != null) {
+        if (loc != null) {
             loc.getWorld().spawnParticle(Particle.TOTEM_OF_UNDYING, loc.clone().add(0, 1, 0), 40, 0.4, 0.8, 0.4, 0.2);
             loc.getWorld().spawnParticle(Particle.FIREWORK, loc.clone().add(0, 1, 0), 20, 0.3, 0.5, 0.3, 0.05);
             loc.getWorld().playSound(loc, Sound.UI_TOAST_CHALLENGE_COMPLETE, 1f, 1.1f);
@@ -790,9 +793,6 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             return 0;
         }
         World world = origin.getWorld();
-        if (world == null) {
-            return 0;
-        }
         int count = 0;
         PotionEffect glow = new PotionEffect(PotionEffectType.GLOWING, 200, 0, false, false);
         int provinceId = infestation.getProvinceId();
@@ -848,7 +848,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
     }
 
     private boolean isActiveLure(Furniture furniture) {
-        if (furniture == null || furniture.getLoc() == null) {
+        if (furniture.getLoc() == null) {
             return false;
         }
         Infestation infestation = get(Provinces.at(furniture.getLoc()));
@@ -941,12 +941,9 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             return;
         }
         event.setCancelled(true);
-        if (!isActiveLure(furniture)) {
-            removeLureFurniture(furniture);
-            return;
-        }
         Infestation infestation = get(Provinces.at(furniture.getLoc()));
-        if (infestation == null || infestation.getPhase() == LurePhase.NONE) {
+        if (infestation == null || !LureFurniture.matches(infestation, furniture)) {
+            removeLureFurniture(furniture);
             return;
         }
         handleLureClick(event.getPlayer(), infestation);

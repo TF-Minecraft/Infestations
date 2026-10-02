@@ -17,6 +17,12 @@ public final class Infestation {
     private String groupId;
     private Severity severity;
     private LurePhase phase = LurePhase.NONE;
+    private long lureGeneration;
+
+    /** Identifies the current lure lifetime for delayed callbacks; not persisted. */
+    public long getLureGeneration() {
+        return lureGeneration;
+    }
     private String worldName;
     private Integer lureX;
     private Integer lureY;
@@ -69,7 +75,7 @@ public final class Infestation {
     }
 
     public boolean hasLure() {
-        return phase != LurePhase.NONE && worldName != null && lureX != null;
+        return phase != LurePhase.NONE && worldName != null && lureX != null && lureY != null && lureZ != null;
     }
 
     public Location lureLocation() {
@@ -95,7 +101,7 @@ public final class Infestation {
     }
 
     public boolean isLureBlock(Block block) {
-        if (block == null || worldName == null || lureX == null) {
+        if (block == null || worldName == null || lureX == null || lureY == null || lureZ == null) {
             return false;
         }
         return worldName.equals(block.getWorld().getName())
@@ -105,6 +111,7 @@ public final class Infestation {
     }
 
     public void placeLure(Block block, long joinEndsAt, int budget) {
+        lureGeneration++;
         this.worldName = block.getWorld().getName();
         this.lureX = block.getX();
         this.lureY = block.getY();
@@ -124,6 +131,7 @@ public final class Infestation {
     }
 
     public void clearLure() {
+        lureGeneration++;
         phase = LurePhase.NONE;
         worldName = null;
         lureX = null;

@@ -103,6 +103,7 @@ public final class InfestationDatabase {
         infestation.setLureReleased(row.lureReleased - row.pendingSpawns);
         if (row.committed != null) {
             for (String id : row.committed) {
+                if (id == null) continue;
                 try {
                     infestation.getCommitted().add(UUID.fromString(id));
                 } catch (IllegalArgumentException ignored) {
@@ -111,6 +112,7 @@ public final class InfestationDatabase {
         }
         if (row.logoutGraceUntil != null) {
             for (Map.Entry<String, Long> e : row.logoutGraceUntil.entrySet()) {
+                if (e.getKey() == null || e.getValue() == null) continue;
                 try {
                     infestation.getLogoutGraceUntil().put(UUID.fromString(e.getKey()), e.getValue());
                 } catch (IllegalArgumentException ignored) {
@@ -119,6 +121,7 @@ public final class InfestationDatabase {
         }
         if (row.deathOnLogin != null) {
             for (String id : row.deathOnLogin) {
+                if (id == null) continue;
                 try {
                     infestation.getDeathOnLogin().add(UUID.fromString(id));
                 } catch (IllegalArgumentException ignored) {

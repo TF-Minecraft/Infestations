@@ -54,4 +54,36 @@ class LureSpawnQuotaTest {
         assertEquals(0, LureSpawnQuota.toSpawn(4, 3, 1, 4, 0, 120_000, 20));
         assertEquals(0, LureSpawnQuota.toSpawn(0, 0, 0, 10, 10_000, 120_000, 20));
     }
+
+    @Test
+    void largeConfiguredDurationsPreserveTheExactPacedQuota() {
+        long duration = Integer.MAX_VALUE * 1000L;
+        assertEquals(Integer.MAX_VALUE / 2, LureSpawnQuota.toSpawn(
+                Integer.MAX_VALUE, 0, 0, 0, duration / 2, duration, Integer.MAX_VALUE));
+    }
+
+    @Test
+    void finalMillisecondBeforeExpiryDoesNotRoundUpToTheFinalIntroduction() {
+        assertEquals(Integer.MAX_VALUE - 1, LureSpawnQuota.toSpawn(
+                Integer.MAX_VALUE, 0, 0, 0, Long.MAX_VALUE - 1, Long.MAX_VALUE, Integer.MAX_VALUE));
+        assertEquals(Integer.MAX_VALUE, LureSpawnQuota.toSpawn(
+                Integer.MAX_VALUE, 0, 0, 0, Long.MAX_VALUE, Long.MAX_VALUE, Integer.MAX_VALUE));
+    }
+
+    @Test
+    void combinedAliveAndPendingCountsCannotWrapIntoAnEmptyField() {
+        assertEquals(0, LureSpawnQuota.toSpawn(
+                1, Integer.MAX_VALUE, Integer.MAX_VALUE, 0, 120_000, 120_000, 20));
+        assertEquals(0, LureSpawnQuota.toSpawn(
+                0, Integer.MAX_VALUE, Integer.MAX_VALUE, 0, 0, 120_000, 20));
+    }
+
+    @Test
+    void negativeCountersAndBackwardClockAreTreatedAsZero() {
+        assertEquals(1, LureSpawnQuota.toSpawn(
+                10, Integer.MIN_VALUE, Integer.MIN_VALUE, Integer.MIN_VALUE,
+                Long.MIN_VALUE, Long.MAX_VALUE, Integer.MAX_VALUE));
+        assertEquals(0, LureSpawnQuota.toSpawn(
+                Integer.MIN_VALUE, 0, 0, 0, 0, 120_000, 20));
+    }
 }

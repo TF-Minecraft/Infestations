@@ -32,6 +32,15 @@ Originally created by [Drefvelin](https://github.com/Drefvelin).
 
 Technical documentation is maintained in [TF-Minecraft/Docs](https://github.com/TF-Minecraft/Docs).
 
+## Tests and coverage
+
+Run `mvn clean verify` with Java 21 and the pinned plugin dependencies installed.
+The build runs the tests and enforces **100% executable-line coverage** across
+all production Java classes, with no coverage exclusions. JaCoCo's HTML and XML
+reports are written to `target/site/jacoco/` and uploaded by the Build workflow.
+Branch and instruction coverage are reported separately; the enforced threshold
+is line coverage. Build and maintenance scripts are outside this runtime-code metric.
+
 ## License
 
 Copyright (c) 2026 TF-Minecraft contributors.

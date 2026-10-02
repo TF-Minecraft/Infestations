@@ -236,18 +236,20 @@ public final class GroupLoader implements LoaderInterface {
         if (group == null || group.mobs().isEmpty()) {
             return null;
         }
-        int total = 0;
+        long total = 0;
         for (WeightedMob m : group.mobs()) {
             total += m.weight();
         }
-        int roll = ThreadLocalRandom.current().nextInt(Math.max(1, total));
-        int acc = 0;
-        for (WeightedMob m : group.mobs()) {
+        long roll = ThreadLocalRandom.current().nextLong(total);
+        long acc = 0;
+        // Loaded weights are positive; the final bucket owns every remaining roll.
+        for (int index = 0; index < group.mobs().size() - 1; index++) {
+            WeightedMob m = group.mobs().get(index);
             acc += m.weight();
             if (roll < acc) {
                 return m.id();
             }
         }
-        return group.mobs().get(0).id();
+        return group.mobs().getLast().id();
     }
 }
