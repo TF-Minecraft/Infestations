@@ -1,6 +1,7 @@
 package net.tfminecraft.infestations.utils;
 
 import java.util.Collections;
+import java.util.Locale;
 import java.util.Set;
 
 import org.bukkit.Location;
@@ -61,7 +62,7 @@ public final class Provinces {
         if (terrain == null) {
             return true;
         }
-        return Cache.skipTerrains.contains(terrain.name().toLowerCase());
+        return Cache.skipTerrains.contains(terrain.name().toLowerCase(Locale.ROOT));
     }
 
     public static boolean isWater(int provinceId) {

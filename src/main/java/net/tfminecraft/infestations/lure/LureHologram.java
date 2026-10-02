@@ -25,9 +25,6 @@ public final class LureHologram {
             return;
         }
         Location pos = position(block);
-        if (pos.getWorld() == null) {
-            return;
-        }
         double rangeSq = Cache.hologramViewRange * Cache.hologramViewRange;
         boolean nearby = false;
         for (var player : Bukkit.getOnlinePlayers()) {
@@ -81,9 +78,6 @@ public final class LureHologram {
     private static TextDisplay spawn(Block block, int provinceId) {
         Location pos = position(block);
         World world = pos.getWorld();
-        if (world == null) {
-            return null;
-        }
         return world.spawn(pos, TextDisplay.class, td -> {
             td.setInvulnerable(true);
             td.setPersistent(true);
@@ -103,9 +97,6 @@ public final class LureHologram {
     private static TextDisplay find(Block block, int provinceId) {
         Location pos = position(block);
         World world = pos.getWorld();
-        if (world == null) {
-            return null;
-        }
         for (Entity entity : world.getNearbyEntities(pos, 2, 2, 2)) {
             if (entity instanceof TextDisplay display) {
                 Integer id = Keys.displayProvince(display.getPersistentDataContainer());
