@@ -12,10 +12,10 @@
     <url>https://github.com/TF-Minecraft/Infestations</url>
 
     <properties>
-        <argLine></argLine>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.proc>full</maven.compiler.proc>
+        <argLine></argLine>
         <interactiblefurniture.version>0.2.1</interactiblefurniture.version>
         <simplefactions.version>3.0.2</simplefactions.version>
         <tlibs.version>2.0.1</tlibs.version>
