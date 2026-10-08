@@ -16,7 +16,7 @@ commits to the fight, and defeats every monster the lure draws in.
 - **Lure raids** — an InteractibleFurniture lure opens a join window, then
   releases a paced wave; defeating the full wave clears the infestation.
 - **Committed parties** — a committed player who leaves the province takes
-  damage until `/lure leave` drops them from the fight. Losing the whole party
+  damage until they opt out of the fight. Losing the whole party
   fails the lure, bystanders who stay are warned and damaged, and logged-out
   players get a grace period.
 - **Optional spread** — idle infestations can worsen and spread to neighbouring
@@ -35,11 +35,14 @@ Technical documentation is maintained in [TF-Minecraft/Docs](https://github.com/
 ## Tests and coverage
 
 Run `mvn clean verify` with Java 21 and the pinned plugin dependencies installed.
-The build runs the tests and enforces **100% executable-line coverage** across
+Tests use JUnit, MockBukkit, and Mockito, with Surefire reports in
+`target/surefire-reports/`. The build enforces **100% executable-line coverage** across
 all production Java classes, with no coverage exclusions. JaCoCo's HTML and XML
 reports are written to `target/site/jacoco/` and uploaded by the Build workflow.
 Branch and instruction coverage are reported separately; the enforced threshold
 is line coverage. Build and maintenance scripts are outside this runtime-code metric.
+The suite simulates Bukkit and external plugins; it does not validate live Paper
+spawning, MythicMobs encounters, or map-service behaviour.
 
 ## License
 
