@@ -46,6 +46,7 @@ import net.tfminecraft.infestations.lure.LureFurniture;
 import net.tfminecraft.infestations.lure.LureHologram;
 import net.tfminecraft.infestations.map.InfestationMapExport;
 import net.tfminecraft.infestations.spawn.*;
+import net.tfminecraft.infestations.utils.Characters;
 import net.tfminecraft.infestations.utils.Provinces;
 import net.tfminecraft.interactiblefurniture.events.*;
 import net.tfminecraft.interactiblefurniture.furniture.Furniture;
@@ -79,6 +80,7 @@ class InfestationManagerTest {
     private MockedStatic<InfestationMapExport> export;
     private MockedStatic<GroupLoader> groups;
     private MockedStatic<Provinces> provinceApi;
+    private MockedStatic<Characters> characters;
     private MockedStatic<SpawnPlanner> planner;
     private MockedStatic<MythicSpawner> spawner;
     private MockedStatic<LureFurniture> furniture;
@@ -106,6 +108,7 @@ class InfestationManagerTest {
         export = scoped(mockStatic(InfestationMapExport.class));
         groups = scoped(mockStatic(GroupLoader.class));
         provinceApi = scoped(mockStatic(Provinces.class));
+        characters = scoped(mockStatic(Characters.class));
         planner = scoped(mockStatic(SpawnPlanner.class));
         spawner = scoped(mockStatic(MythicSpawner.class));
         furniture = scoped(mockStatic(LureFurniture.class));
@@ -812,6 +815,33 @@ class InfestationManagerTest {
         state.getCommitted().clear(); state.getDeathOnLogin().add(p.getUniqueId()); when(p.isDead()).thenReturn(false);
         manager.onJoin(join); runLater(); verify(p, times(1)).damage(anyDouble());
         when(p.isOnline()).thenReturn(false); manager.onJoin(join); runLater(); verify(p, times(1)).damage(anyDouble());
+    }
+
+    @Test void deathOnLoginWaitsForTheCharacterWhoLoggedOffAndIsDroppedOnceThatCharacterDied() {
+        Infestation state = lure(1, LurePhase.ACTIVE);
+        Player p = player(1); UUID id = p.getUniqueId(); state.getCommitted().add(id);
+        characters.when(() -> Characters.activeId(p)).thenReturn("alice");
+        PlayerQuitEvent quit = mock(PlayerQuitEvent.class); when(quit.getPlayer()).thenReturn(p);
+        manager.onQuit(quit); assertEquals("alice", state.getLogoutCharacter().get(id));
+        state.getLogoutGraceUntil().clear(); state.getDeathOnLogin().add(id);
+
+        characters.when(() -> Characters.activeId(p)).thenReturn("bob");
+        PlayerJoinEvent join = mock(PlayerJoinEvent.class); when(join.getPlayer()).thenReturn(p);
+        manager.onJoin(join); runLater();
+        verify(p, never()).damage(anyDouble());
+        assertTrue(state.getDeathOnLogin().contains(id)); assertEquals("alice", state.getLogoutCharacter().get(id));
+
+        characters.when(() -> Characters.activeId(p)).thenReturn("alice");
+        manager.applyDeathOnLogin(p);
+        verify(p).damage(40.0);
+        assertTrue(state.getDeathOnLogin().isEmpty()); assertTrue(state.getLogoutCharacter().isEmpty());
+
+        state.getDeathOnLogin().add(id); state.getLogoutCharacter().put(id, "alice");
+        characters.when(() -> Characters.activeId(p)).thenReturn("bob");
+        characters.when(() -> Characters.isDead(p, "alice")).thenReturn(true);
+        manager.applyDeathOnLogin(p);
+        verify(p, times(1)).damage(anyDouble());
+        assertFalse(state.isCommitted(id)); assertEquals(LurePhase.NONE, state.getPhase());
     }
 
     @Test void provinceEventsWarnOnlyRelevantParticipants() {

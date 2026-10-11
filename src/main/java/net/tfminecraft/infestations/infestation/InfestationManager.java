@@ -73,6 +73,7 @@ import net.tfminecraft.infestations.spawn.LureSpawnQuota;
 import net.tfminecraft.infestations.spawn.MythicSpawner;
 import net.tfminecraft.infestations.spawn.SpawnLog;
 import net.tfminecraft.infestations.spawn.SpawnPlanner;
+import net.tfminecraft.infestations.utils.Characters;
 import net.tfminecraft.infestations.utils.Provinces;
 
 public final class InfestationManager implements Listener, AmbientSpawnService.CollectionInfestations {
@@ -1106,11 +1107,17 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
     public void onQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
         long until = System.currentTimeMillis() + Cache.logoutGraceSeconds * 1000L;
+        String character = Characters.activeId(player);
         for (Infestation infestation : byProvince.values()) {
             if (!infestation.isCommitted(player.getUniqueId())) {
                 continue;
             }
             infestation.getLogoutGraceUntil().put(player.getUniqueId(), until);
+            if (character == null) {
+                infestation.getLogoutCharacter().remove(player.getUniqueId());
+            } else {
+                infestation.getLogoutCharacter().put(player.getUniqueId(), character);
+            }
         }
         save();
     }
@@ -1124,13 +1131,47 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             }
             for (Infestation infestation : byProvince.values()) {
                 infestation.getLogoutGraceUntil().remove(player.getUniqueId());
-                if (infestation.getDeathOnLogin().remove(player.getUniqueId())
-                        && infestation.isCommitted(player.getUniqueId())
-                        && !player.isDead()) {
-                    player.damage(Math.max(40.0, player.getHealth() + 10.0));
+                if (!infestation.getDeathOnLogin().contains(player.getUniqueId())) {
+                    infestation.getLogoutCharacter().remove(player.getUniqueId());
                 }
             }
+            applyDeathOnLogin(player);
         }, 5L);
+    }
+
+    /**
+     * Kills a player whose lure grace ran out, once the character who logged off is active.
+     * The death waits while another character is active and is dropped if that character has died.
+     */
+    public void applyDeathOnLogin(Player player) {
+        UUID id = player.getUniqueId();
+        String active = Characters.activeId(player);
+        boolean changed = false;
+        for (Infestation infestation : List.copyOf(byProvince.values())) {
+            if (!infestation.getDeathOnLogin().contains(id)) {
+                continue;
+            }
+            String target = infestation.getLogoutCharacter().get(id);
+            boolean otherCharacter = target != null && !target.equals(active);
+            if (otherCharacter && !Characters.isDead(player, target)) {
+                continue;
+            }
+            infestation.getDeathOnLogin().remove(id);
+            infestation.getLogoutCharacter().remove(id);
+            changed = true;
+            if (otherCharacter) {
+                // That character already died, which settles what the lure owed.
+                infestation.getCommitted().remove(id);
+                if (infestation.getPhase() != LurePhase.NONE) {
+                    checkWipe(infestation);
+                }
+            } else if (infestation.isCommitted(id) && !player.isDead()) {
+                player.damage(Math.max(40.0, player.getHealth() + 10.0));
+            }
+        }
+        if (changed) {
+            save();
+        }
     }
 
     @EventHandler

@@ -128,6 +128,15 @@ public final class InfestationDatabase {
                 }
             }
         }
+        if (row.logoutCharacter != null) {
+            for (Map.Entry<String, String> e : row.logoutCharacter.entrySet()) {
+                if (e.getKey() == null || e.getValue() == null) continue;
+                try {
+                    infestation.getLogoutCharacter().put(UUID.fromString(e.getKey()), e.getValue());
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+        }
         return infestation;
     }
 
@@ -156,6 +165,9 @@ public final class InfestationDatabase {
         }
         for (UUID id : infestation.getDeathOnLogin()) {
             row.deathOnLogin.add(id.toString());
+        }
+        for (Map.Entry<UUID, String> e : infestation.getLogoutCharacter().entrySet()) {
+            row.logoutCharacter.put(e.getKey().toString(), e.getValue());
         }
         return row;
     }

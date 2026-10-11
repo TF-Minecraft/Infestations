@@ -39,6 +39,8 @@ public final class Infestation {
     private final Set<UUID> committed = new HashSet<>();
     private final Map<UUID, Long> logoutGraceUntil = new HashMap<>();
     private final Set<UUID> deathOnLogin = new HashSet<>();
+    /** The character each committed player logged off as, so a death on login reaches only that character. */
+    private final Map<UUID, String> logoutCharacter = new HashMap<>();
 
     public Infestation(int provinceId, String groupId, Severity severity) {
         this.provinceId = provinceId;
@@ -124,6 +126,7 @@ public final class Infestation {
         this.committed.clear();
         this.logoutGraceUntil.clear();
         this.deathOnLogin.clear();
+        this.logoutCharacter.clear();
         this.waveRetryAtTick = 0;
         this.lureActivatedAt = 0;
         this.lureReleased = 0;
@@ -144,6 +147,7 @@ public final class Infestation {
         committed.clear();
         logoutGraceUntil.clear();
         deathOnLogin.clear();
+        logoutCharacter.clear();
         waveRetryAtTick = 0;
         lureActivatedAt = 0;
         lureReleased = 0;
@@ -290,6 +294,10 @@ public final class Infestation {
 
     public Set<UUID> getDeathOnLogin() {
         return deathOnLogin;
+    }
+
+    public Map<UUID, String> getLogoutCharacter() {
+        return logoutCharacter;
     }
 
     public boolean isCommitted(UUID id) {

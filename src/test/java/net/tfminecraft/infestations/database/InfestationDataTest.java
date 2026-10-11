@@ -16,6 +16,7 @@ import org.mockbukkit.mockbukkit.MockBukkit;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Logger;
@@ -140,6 +141,7 @@ class InfestationDataTest {
         infestation.getCommitted().add(PLAYER);
         infestation.getLogoutGraceUntil().put(PLAYER, 100L);
         infestation.getDeathOnLogin().add(PLAYER);
+        infestation.getLogoutCharacter().put(PLAYER, "alice");
         infestation.setWaveRetryAtTick(5);
         infestation.setVictoryAtTick(6);
         infestation.setPendingSpawns(3);
@@ -161,6 +163,7 @@ class InfestationDataTest {
         assertTrue(infestation.getCommitted().isEmpty());
         assertTrue(infestation.getLogoutGraceUntil().isEmpty());
         assertTrue(infestation.getDeathOnLogin().isEmpty());
+        assertTrue(infestation.getLogoutCharacter().isEmpty());
         assertEquals(0, infestation.getPendingSpawns());
         assertEquals(0, infestation.getEnemiesAlive());
         assertEquals(0, infestation.getLureReleased());
@@ -171,6 +174,7 @@ class InfestationDataTest {
         assertTrue(infestation.isCommitted(PLAYER));
         infestation.getLogoutGraceUntil().put(PLAYER, 100L);
         infestation.getDeathOnLogin().add(PLAYER);
+        infestation.getLogoutCharacter().put(PLAYER, "alice");
         infestation.clearLure();
         assertSame(LurePhase.NONE, infestation.getPhase());
         assertFalse(infestation.hasLure());
@@ -184,6 +188,7 @@ class InfestationDataTest {
         assertFalse(infestation.isCommitted(PLAYER));
         assertTrue(infestation.getLogoutGraceUntil().isEmpty());
         assertTrue(infestation.getDeathOnLogin().isEmpty());
+        assertTrue(infestation.getLogoutCharacter().isEmpty());
     }
 
     @Test
@@ -245,6 +250,7 @@ class InfestationDataTest {
         original.getCommitted().add(PLAYER);
         original.getLogoutGraceUntil().put(PLAYER, 9876L);
         original.getDeathOnLogin().add(PLAYER);
+        original.getLogoutCharacter().put(PLAYER, "alice");
         InfestationDatabase.save(List.of(original));
         assertTrue(Files.readString(InfestationDatabase.file().toPath()).contains("test-group"));
         Infestation loaded = InfestationDatabase.load().getFirst();
@@ -263,6 +269,7 @@ class InfestationDataTest {
         assertEquals(Set.of(PLAYER), loaded.getCommitted());
         assertEquals(9876L, loaded.getLogoutGraceUntil().get(PLAYER));
         assertEquals(Set.of(PLAYER), loaded.getDeathOnLogin());
+        assertEquals(Map.of(PLAYER, "alice"), loaded.getLogoutCharacter());
     }
 
     @Test
@@ -273,10 +280,11 @@ class InfestationDataTest {
                  {"provinceId":2,"severity":"mild"},
                  {"provinceId":3,"groupId":"valid","severity":"mild","phase":"old-phase",
                   "committed":["bad","%s"],"logoutGraceUntil":{"bad":5,"%s":6},
-                  "deathOnLogin":["bad","%s"],"pendingSpawns":20,"lureReleased":3},
+                  "deathOnLogin":["bad","%s"],"logoutCharacter":{"bad":"x","%s":"alice"},
+                  "pendingSpawns":20,"lureReleased":3},
                  {"provinceId":4,"groupId":"legacy","severity":"worrying","committed":null,
-                  "logoutGraceUntil":null,"deathOnLogin":null}]
-                """.formatted(PLAYER, PLAYER, PLAYER));
+                  "logoutGraceUntil":null,"deathOnLogin":null,"logoutCharacter":{"%s":null}}]
+                """.formatted(PLAYER, PLAYER, PLAYER, PLAYER, PLAYER));
         List<Infestation> loaded = InfestationDatabase.load();
         assertEquals(2, loaded.size());
         assertSame(LurePhase.NONE, loaded.getFirst().getPhase());
@@ -286,6 +294,8 @@ class InfestationDataTest {
         assertEquals(Set.of(PLAYER), loaded.getFirst().getDeathOnLogin());
         assertTrue(loaded.get(1).getCommitted().isEmpty());
         assertTrue(loaded.get(1).getDeathOnLogin().isEmpty());
+        assertEquals(Map.of(PLAYER, "alice"), loaded.getFirst().getLogoutCharacter());
+        assertTrue(loaded.get(1).getLogoutCharacter().isEmpty());
     }
 
     @Test

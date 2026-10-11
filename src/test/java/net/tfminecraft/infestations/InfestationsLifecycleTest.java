@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.logging.Logger;
 
+import org.bukkit.event.HandlerList;
 import org.bukkit.plugin.PluginDescriptionFile;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
@@ -21,6 +22,7 @@ import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 
 import net.tfminecraft.infestations.cache.Cache;
+import net.tfminecraft.infestations.infestation.CharacterActivatedListener;
 import net.tfminecraft.infestations.infestation.InfestationManager;
 
 class InfestationsLifecycleTest {
@@ -79,6 +81,15 @@ class InfestationsLifecycleTest {
         assertSame(plugin.getCommand("infestation").getExecutor(), plugin.getCommand("infestation").getTabCompleter());
         assertSame(plugin.getCommand("lure").getExecutor(), plugin.getCommand("lure").getTabCompleter());
         plugin.onDisable(); verify(plugin.getInfestationManager()).shutdown();
+    }
+
+    @Test void characterListenerIsRegisteredOnlyWithRPCharacters() {
+        assertFalse(HandlerList.getRegisteredListeners(plugin).stream()
+                .anyMatch(l -> l.getListener() instanceof CharacterActivatedListener));
+        MockBukkit.createMockPlugin("RPCharacters");
+        plugin.onEnable();
+        assertTrue(HandlerList.getRegisteredListeners(plugin).stream()
+                .anyMatch(l -> l.getListener() instanceof CharacterActivatedListener));
     }
 
     @Test void reloadAppliesCurrentConfigAndReportsDebugSettingsWithoutReplacingFiles() throws Exception {
