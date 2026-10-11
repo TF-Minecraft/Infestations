@@ -27,6 +27,7 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.scheduler.BukkitScheduler;
 import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.MockedConstruction;
@@ -46,6 +47,7 @@ import net.tfminecraft.infestations.lure.LureFurniture;
 import net.tfminecraft.infestations.lure.LureHologram;
 import net.tfminecraft.infestations.map.InfestationMapExport;
 import net.tfminecraft.infestations.spawn.*;
+import net.tfminecraft.infestations.utils.Characters;
 import net.tfminecraft.infestations.utils.Provinces;
 import net.tfminecraft.interactiblefurniture.events.*;
 import net.tfminecraft.interactiblefurniture.furniture.Furniture;
@@ -79,6 +81,7 @@ class InfestationManagerTest {
     private MockedStatic<InfestationMapExport> export;
     private MockedStatic<GroupLoader> groups;
     private MockedStatic<Provinces> provinceApi;
+    private MockedStatic<Characters> characters;
     private MockedStatic<SpawnPlanner> planner;
     private MockedStatic<MythicSpawner> spawner;
     private MockedStatic<LureFurniture> furniture;
@@ -106,6 +109,7 @@ class InfestationManagerTest {
         export = scoped(mockStatic(InfestationMapExport.class));
         groups = scoped(mockStatic(GroupLoader.class));
         provinceApi = scoped(mockStatic(Provinces.class));
+        characters = scoped(mockStatic(Characters.class));
         planner = scoped(mockStatic(SpawnPlanner.class));
         spawner = scoped(mockStatic(MythicSpawner.class));
         furniture = scoped(mockStatic(LureFurniture.class));
@@ -812,6 +816,163 @@ class InfestationManagerTest {
         state.getCommitted().clear(); state.getDeathOnLogin().add(p.getUniqueId()); when(p.isDead()).thenReturn(false);
         manager.onJoin(join); runLater(); verify(p, times(1)).damage(anyDouble());
         when(p.isOnline()).thenReturn(false); manager.onJoin(join); runLater(); verify(p, times(1)).damage(anyDouble());
+    }
+
+    @Test void deathOnLoginWaitsForTheCharacterWhoLoggedOffAndIsDroppedOnceThatCharacterDied() {
+        Infestation state = lure(1, LurePhase.ACTIVE);
+        Player p = player(1); UUID id = p.getUniqueId(); state.getCommitted().add(id);
+        characters.when(Characters::enabled).thenReturn(true);
+        characters.when(() -> Characters.activeId(p)).thenReturn("alice");
+        PlayerQuitEvent quit = mock(PlayerQuitEvent.class); when(quit.getPlayer()).thenReturn(p);
+        manager.onQuit(quit); assertEquals("alice", state.getLogoutCharacter().get(id));
+        state.getLogoutGraceUntil().clear(); state.getDeathOnLogin().add(id);
+
+        characters.when(() -> Characters.activeId(p)).thenReturn("bob");
+        PlayerJoinEvent join = mock(PlayerJoinEvent.class); when(join.getPlayer()).thenReturn(p);
+        manager.onJoin(join); runLater();
+        verify(p, never()).damage(anyDouble());
+        assertTrue(state.getDeathOnLogin().contains(id)); assertEquals("alice", state.getLogoutCharacter().get(id));
+
+        characters.when(() -> Characters.activeId(p)).thenReturn("alice");
+        manager.characterReturned(p);
+        verify(p).damage(40.0);
+        assertTrue(state.getDeathOnLogin().isEmpty()); assertTrue(state.getLogoutCharacter().isEmpty());
+
+        state.getDeathOnLogin().add(id); state.getLogoutCharacter().put(id, "alice");
+        characters.when(() -> Characters.activeId(p)).thenReturn("bob");
+        characters.when(() -> Characters.isDead(p, "alice")).thenReturn(true);
+        manager.characterReturned(p);
+        verify(p, times(1)).damage(anyDouble());
+        assertFalse(state.isCommitted(id)); assertEquals(LurePhase.NONE, state.getPhase());
+    }
+
+    @Test void anotherCharacterLoggingOffKeepsThePendingCharacterAndDeadline() {
+        Infestation state = lure(1, LurePhase.ACTIVE); Infestation waiting = lure(2, LurePhase.ACTIVE);
+        Player p = player(1); UUID id = p.getUniqueId();
+        state.getCommitted().add(id); waiting.getCommitted().add(id);
+        characters.when(Characters::enabled).thenReturn(true);
+        state.getDeathOnLogin().add(id); state.getLogoutCharacter().put(id, "alice");
+        waiting.getLogoutGraceUntil().put(id, 1234L); waiting.getLogoutCharacter().put(id, "alice");
+        characters.when(() -> Characters.activeId(p)).thenReturn("bob");
+        PlayerJoinEvent join = mock(PlayerJoinEvent.class); when(join.getPlayer()).thenReturn(p);
+        manager.onJoin(join); runLater();
+        assertEquals(1234L, waiting.getLogoutGraceUntil().get(id));
+        PlayerQuitEvent quit = mock(PlayerQuitEvent.class); when(quit.getPlayer()).thenReturn(p);
+        manager.onQuit(quit);
+        characters.when(() -> Characters.activeId(p)).thenReturn(null);
+        manager.onQuit(quit);
+        assertEquals(Map.of(id, "alice"), state.getLogoutCharacter()); assertTrue(state.getLogoutGraceUntil().isEmpty());
+        assertEquals(Set.of(id), state.getDeathOnLogin());
+        assertEquals(Map.of(id, "alice"), waiting.getLogoutCharacter());
+        assertEquals(Map.of(id, 1234L), waiting.getLogoutGraceUntil());
+    }
+
+    @Test void anotherCharacterIsNotPunishedForAndCannotSettleTheCommitment() throws Exception {
+        Infestation owed = lure(1, LurePhase.ACTIVE); Infestation grace = lure(3, LurePhase.ACTIVE);
+        Player p = player(2); UUID id = p.getUniqueId();
+        owed.getCommitted().add(id); grace.getCommitted().add(id);
+        characters.when(Characters::enabled).thenReturn(true);
+        owed.getDeathOnLogin().add(id); owed.getLogoutCharacter().put(id, "alice");
+        grace.getLogoutGraceUntil().put(id, Long.MAX_VALUE); grace.getLogoutCharacter().put(id, "alice");
+        characters.when(() -> Characters.activeId(p)).thenReturn("bob");
+        atTick(100); call("tickOutsideCommitted", owed); call("tickOutsideCommitted", grace);
+        PlayerProvinceLeaveEvent leave = mock(PlayerProvinceLeaveEvent.class);
+        when(leave.getPlayer()).thenReturn(p); when(leave.getProvinceId()).thenReturn(1);
+        manager.onLeaveProvince(leave);
+        verify(p, never()).damage(anyDouble()); verify(p, never()).sendMessage("lure-outside");
+        assertFalse(manager.leaveLure(p));
+        EntityDeathEvent death = mock(EntityDeathEvent.class); when(death.getEntity()).thenReturn(p);
+        manager.onDeath(death);
+        for (Infestation infestation : List.of(owed, grace)) {
+            assertTrue(infestation.isCommitted(id)); assertEquals("alice", infestation.getLogoutCharacter().get(id));
+            assertEquals(LurePhase.ACTIVE, infestation.getPhase());
+        }
+        assertEquals(Set.of(id), owed.getDeathOnLogin()); assertTrue(grace.getLogoutGraceUntil().containsKey(id));
+
+        characters.when(() -> Characters.activeId(p)).thenReturn("alice");
+        owed.getDeathOnLogin().clear(); owed.getCommitted().remove(id); owed.getLogoutCharacter().remove(id);
+        manager.characterReturned(p);
+        assertTrue(grace.getLogoutGraceUntil().isEmpty()); assertTrue(grace.getLogoutCharacter().isEmpty());
+        call("tickOutsideCommitted", grace); verify(p).damage(2.0);
+        assertTrue(manager.leaveLure(p)); assertFalse(grace.isCommitted(id));
+    }
+
+    @Test void unidentifiedDebtsBringNoDeserterPenaltiesWhileRPCharactersRuns() throws Exception {
+        Infestation legacy = lure(1, LurePhase.ACTIVE);
+        Player p = player(2); UUID id = p.getUniqueId(); legacy.getCommitted().add(id); legacy.getDeathOnLogin().add(id);
+        characters.when(Characters::enabled).thenReturn(true);
+        characters.when(() -> Characters.activeId(p)).thenReturn("bob");
+        atTick(100); call("tickOutsideCommitted", legacy);
+        PlayerProvinceLeaveEvent leave = mock(PlayerProvinceLeaveEvent.class);
+        when(leave.getPlayer()).thenReturn(p); when(leave.getProvinceId()).thenReturn(1);
+        manager.onLeaveProvince(leave);
+        verify(p, never()).damage(anyDouble()); verify(p, never()).sendMessage("lure-outside");
+        characters.when(Characters::enabled).thenReturn(false);
+        call("tickOutsideCommitted", legacy); verify(p).damage(2.0);
+    }
+
+    @Test void unidentifiedDebtsDoNotKeepTheLureAliveAcrossSaveAndLoad(@TempDir java.nio.file.Path dir) {
+        Infestation legacy = lure(1, LurePhase.ACTIVE);
+        Player p = player(1); UUID id = p.getUniqueId(), offline = UUID.randomUUID(), tagged = UUID.randomUUID();
+        legacy.getCommitted().addAll(List.of(id, offline, tagged)); legacy.getDeathOnLogin().addAll(List.of(id, offline, tagged));
+        legacy.getLogoutCharacter().put(tagged, "carol");
+        characters.when(Characters::enabled).thenReturn(true);
+        characters.when(() -> Characters.activeId(p)).thenReturn("bob");
+        mocks.remove(database); database.close();
+        when(plugin.getDataFolder()).thenReturn(dir.toFile());
+        manager.save(); manager.start();
+        Infestation loaded = manager.get(1);
+        assertNotSame(legacy, loaded); assertEquals(Set.of(id, offline, tagged), loaded.getDeathOnLogin());
+        call("checkWipe", loaded); assertEquals(LurePhase.ACTIVE, loaded.getPhase());
+        loaded.getDeathOnLogin().remove(tagged); loaded.getCommitted().remove(tagged); loaded.getLogoutCharacter().clear();
+        manager.save(); manager.start(); loaded = manager.get(1);
+        assertEquals(Set.of(id, offline), loaded.getDeathOnLogin()); assertEquals(LurePhase.ACTIVE, loaded.getPhase());
+        call("checkWipe", loaded);
+        assertEquals(LurePhase.NONE, loaded.getPhase());
+        assertTrue(loaded.getCommitted().isEmpty()); assertTrue(loaded.getDeathOnLogin().isEmpty());
+        verify(p).sendMessage("lure-fail"); verify(plugin.getLogger(), atLeastOnce()).warning(contains(id.toString()));
+    }
+
+    @Test void unidentifiedDeathsAreHeldWithAWarningWhileRPCharactersRuns() {
+        Infestation legacy = lure(1, LurePhase.ACTIVE);
+        Player p = player(1); UUID id = p.getUniqueId(); legacy.getCommitted().add(id); legacy.getDeathOnLogin().add(id);
+        database.when(InfestationDatabase::load).thenReturn(List.of(legacy));
+        manager.start();
+        verify(plugin.getLogger(), never()).warning(anyString());
+        characters.when(Characters::enabled).thenReturn(true);
+        characters.when(() -> Characters.activeId(p)).thenReturn("bob");
+        manager.start();
+        verify(plugin.getLogger()).warning(contains(id + " in province 1"));
+        PlayerJoinEvent join = mock(PlayerJoinEvent.class); when(join.getPlayer()).thenReturn(p);
+        manager.onJoin(join); runLater();
+        verify(p, never()).damage(anyDouble());
+        assertEquals(Set.of(id), legacy.getDeathOnLogin()); assertTrue(legacy.isCommitted(id));
+        PlayerQuitEvent quit = mock(PlayerQuitEvent.class); when(quit.getPlayer()).thenReturn(p);
+        manager.onQuit(quit);
+        assertTrue(legacy.getLogoutGraceUntil().isEmpty()); assertTrue(legacy.getLogoutCharacter().isEmpty());
+        UUID untagged = UUID.randomUUID(), tagged = UUID.randomUUID();
+        legacy.getLogoutGraceUntil().put(untagged, 1L); legacy.getLogoutGraceUntil().put(tagged, 1L);
+        legacy.getLogoutCharacter().put(tagged, "carol");
+        call("expireGrace", legacy, 2L);
+        verify(plugin.getLogger()).warning(contains(untagged.toString()));
+        verify(plugin.getLogger(), never()).warning(contains(tagged.toString()));
+    }
+
+    @Test void taggedDeathsUseTheAccountWithoutRPCharactersAndWaitForMissingCharacterData() {
+        Infestation state = lure(1, LurePhase.ACTIVE);
+        Player p = player(1); UUID id = p.getUniqueId(); state.getCommitted().add(id);
+        state.getDeathOnLogin().add(id); state.getLogoutCharacter().put(id, "alice");
+        characters.when(Characters::enabled).thenReturn(true);
+        manager.characterReturned(p);
+        verify(p, never()).damage(anyDouble()); assertEquals(Set.of(id), state.getDeathOnLogin());
+        characters.when(Characters::enabled).thenReturn(false);
+        PlayerJoinEvent join = mock(PlayerJoinEvent.class); when(join.getPlayer()).thenReturn(p);
+        manager.onJoin(join); runLater();
+        verify(p).damage(40.0);
+        assertTrue(state.getDeathOnLogin().isEmpty()); assertTrue(state.getLogoutCharacter().isEmpty());
+        state.getLogoutGraceUntil().put(id, Long.MAX_VALUE); state.getLogoutCharacter().put(id, "alice");
+        manager.onJoin(join); runLater();
+        assertTrue(state.getLogoutGraceUntil().isEmpty()); assertTrue(state.getLogoutCharacter().isEmpty());
     }
 
     @Test void provinceEventsWarnOnlyRelevantParticipants() {

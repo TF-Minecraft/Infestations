@@ -17,6 +17,7 @@
         <maven.compiler.proc>full</maven.compiler.proc>
         <argLine></argLine>
         <interactiblefurniture.version>0.2.1</interactiblefurniture.version>
+        <rpcharacters.version>2.4.0</rpcharacters.version>
         <simplefactions.version>3.0.2</simplefactions.version>
         <tlibs.version>2.0.1</tlibs.version>
     </properties>
@@ -44,6 +45,18 @@
             <groupId>me.plugins</groupId>
             <artifactId>tlibs</artifactId>
             <version>${tlibs.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>net.tfminecraft</groupId>
+            <artifactId>rpcharacters</artifactId>
+            <version>${rpcharacters.version}</version>
             <scope>provided</scope>
             <exclusions>
                 <exclusion>
