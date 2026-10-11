@@ -103,6 +103,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         for (Infestation infestation : InfestationDatabase.load()) {
             byProvince.put(infestation.getProvinceId(), infestation);
         }
+        warnUnidentifiedDeaths();
         InfestationMapExport.exportAsync(byProvince.values());
         task = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 20L, 1L);
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -155,6 +156,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         for (Infestation infestation : InfestationDatabase.load()) {
             byProvince.put(infestation.getProvinceId(), infestation);
         }
+        warnUnidentifiedDeaths();
         pluginFurnitureRemove = true;
         try {
             for (Infestation old : previous.values()) {
@@ -638,7 +640,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) {
                 continue;
             }
-            if (Provinces.at(player) == infestation.getProvinceId()) {
+            if (Provinces.at(player) == infestation.getProvinceId() || heldByOtherCharacter(infestation, player)) {
                 continue;
             }
             actionBar(player, bar);
@@ -658,7 +660,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         UUID id = player.getUniqueId();
         boolean found = false;
         for (Infestation infestation : List.copyOf(byProvince.values())) {
-            if (!infestation.isCommitted(id)) {
+            if (!infestation.isCommitted(id) || heldByOtherCharacter(infestation, player)) {
                 continue;
             }
             if (!found) {
@@ -669,6 +671,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             infestation.getCommitted().remove(id);
             infestation.getLogoutGraceUntil().remove(id);
             infestation.getDeathOnLogin().remove(id);
+            infestation.getLogoutCharacter().remove(id);
             if (infestation.getPhase() != LurePhase.NONE && !hasLivingOrGrace(infestation)) {
                 failLure(infestation);
                 if (!inProvince) {
@@ -689,8 +692,44 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             if (now >= e.getValue()) {
                 infestation.getDeathOnLogin().add(e.getKey());
                 it.remove();
+                if (isUnidentified(infestation, e.getKey())) {
+                    warnUnidentified(infestation, e.getKey());
+                }
             }
         }
+    }
+
+    /**
+     * True when the account's commitment here belongs to a logged off character other than the active one.
+     * That character's grace or pending death stays with it, so the active character is not treated as committed.
+     */
+    private static boolean heldByOtherCharacter(Infestation infestation, Player player) {
+        if (!Characters.enabled()) {
+            return false;
+        }
+        String owner = infestation.getLogoutCharacter().get(player.getUniqueId());
+        return owner != null && !owner.equals(Characters.activeId(player));
+    }
+
+    /** A death owed with RPCharacters enabled but no recorded character is held, never applied. */
+    private static boolean isUnidentified(Infestation infestation, UUID id) {
+        return Characters.enabled() && !infestation.getLogoutCharacter().containsKey(id);
+    }
+
+    private void warnUnidentifiedDeaths() {
+        for (Infestation infestation : byProvince.values()) {
+            for (UUID id : infestation.getDeathOnLogin()) {
+                if (isUnidentified(infestation, id)) {
+                    warnUnidentified(infestation, id);
+                }
+            }
+        }
+    }
+
+    private void warnUnidentified(Infestation infestation, UUID id) {
+        plugin.getLogger().warning("[Infestations] Holding the death on login owed by " + id + " in province "
+                + infestation.getProvinceId() + ": it has no character, so it will not be applied."
+                + " It clears when the lure ends or that account dies or leaves the lure.");
     }
 
     private void checkWipe(Infestation infestation) {
@@ -825,6 +864,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         infestation.getCommitted().add(player.getUniqueId());
         infestation.getLogoutGraceUntil().remove(player.getUniqueId());
         infestation.getDeathOnLogin().remove(player.getUniqueId());
+        infestation.getLogoutCharacter().remove(player.getUniqueId());
         player.sendMessage(Messages.get("lure-join"));
         save();
     }
@@ -1090,12 +1130,13 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
 
     private void onPlayerDeath(Player player) {
         for (Infestation infestation : List.copyOf(byProvince.values())) {
-            if (!infestation.isCommitted(player.getUniqueId())) {
+            if (!infestation.isCommitted(player.getUniqueId()) || heldByOtherCharacter(infestation, player)) {
                 continue;
             }
             infestation.getCommitted().remove(player.getUniqueId());
             infestation.getLogoutGraceUntil().remove(player.getUniqueId());
             infestation.getDeathOnLogin().remove(player.getUniqueId());
+            infestation.getLogoutCharacter().remove(player.getUniqueId());
             if (infestation.getPhase() != LurePhase.NONE) {
                 checkWipe(infestation);
             }
@@ -1103,20 +1144,22 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         save();
     }
 
-    @EventHandler
+    /** Runs before RPCharacters' quit listener drops the player's character data. */
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
+        UUID id = player.getUniqueId();
         long until = System.currentTimeMillis() + Cache.logoutGraceSeconds * 1000L;
         String character = Characters.activeId(player);
         for (Infestation infestation : byProvince.values()) {
-            if (!infestation.isCommitted(player.getUniqueId())) {
+            // A grace or death already owed keeps its character and deadline.
+            if (!infestation.isCommitted(id) || infestation.getLogoutCharacter().containsKey(id)
+                    || infestation.getDeathOnLogin().contains(id)) {
                 continue;
             }
-            infestation.getLogoutGraceUntil().put(player.getUniqueId(), until);
-            if (character == null) {
-                infestation.getLogoutCharacter().remove(player.getUniqueId());
-            } else {
-                infestation.getLogoutCharacter().put(player.getUniqueId(), character);
+            infestation.getLogoutGraceUntil().put(id, until);
+            if (character != null) {
+                infestation.getLogoutCharacter().put(id, character);
             }
         }
         save();
@@ -1126,33 +1169,37 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (!player.isOnline()) {
-                return;
+            if (player.isOnline()) {
+                characterReturned(player);
             }
-            for (Infestation infestation : byProvince.values()) {
-                infestation.getLogoutGraceUntil().remove(player.getUniqueId());
-                if (!infestation.getDeathOnLogin().contains(player.getUniqueId())) {
-                    infestation.getLogoutCharacter().remove(player.getUniqueId());
-                }
-            }
-            applyDeathOnLogin(player);
         }, 5L);
     }
 
     /**
-     * Kills a player whose lure grace ran out, once the character who logged off is active.
-     * The death waits while another character is active and is dropped if that character has died.
+     * Ends the logout grace of the character now active and kills it if its grace ran out.
+     * Another character's grace or death waits, and the death is dropped once that character has died.
+     * Without RPCharacters the account is the character, so any return counts.
      */
-    public void applyDeathOnLogin(Player player) {
+    public void characterReturned(Player player) {
         UUID id = player.getUniqueId();
+        boolean tracked = Characters.enabled();
         String active = Characters.activeId(player);
         boolean changed = false;
         for (Infestation infestation : List.copyOf(byProvince.values())) {
+            String target = tracked ? infestation.getLogoutCharacter().get(id) : null;
+            boolean otherCharacter = target != null && !target.equals(active);
+            if (!otherCharacter && infestation.getLogoutGraceUntil().remove(id) != null) {
+                changed = true;
+            }
             if (!infestation.getDeathOnLogin().contains(id)) {
+                if (!otherCharacter && infestation.getLogoutCharacter().remove(id) != null) {
+                    changed = true;
+                }
                 continue;
             }
-            String target = infestation.getLogoutCharacter().get(id);
-            boolean otherCharacter = target != null && !target.equals(active);
+            if (isUnidentified(infestation, id)) {
+                continue;
+            }
             if (otherCharacter && !Characters.isDead(player, target)) {
                 continue;
             }
@@ -1184,7 +1231,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             return;
         }
         Player player = event.getPlayer();
-        if (!infestation.isCommitted(player.getUniqueId())) {
+        if (!infestation.isCommitted(player.getUniqueId()) || heldByOtherCharacter(infestation, player)) {
             return;
         }
         if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) {

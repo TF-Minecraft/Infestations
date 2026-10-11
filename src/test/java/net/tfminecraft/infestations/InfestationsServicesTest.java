@@ -2,6 +2,7 @@ package net.tfminecraft.infestations;
 
 import com.google.gson.JsonParser;
 import net.tfminecraft.infestations.cache.Cache;
+import net.tfminecraft.infestations.database.InfestationDatabase;
 import net.tfminecraft.infestations.infestation.*;
 import net.tfminecraft.infestations.loader.GroupLoader;
 import net.tfminecraft.infestations.map.InfestationMapExport;
@@ -21,6 +22,9 @@ import net.tfminecraft.simplefactions.managers.ProvinceManager;
 import net.tfminecraft.simplefactions.rest.RestServer;
 import org.bukkit.*;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitScheduler;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
@@ -80,6 +84,30 @@ class InfestationsServicesTest {
             loaded.remove(data);
         }
     }
+    @Test @SuppressWarnings("unchecked") void quitRecordsTheCharacterBeforeRPCharactersDropsItsData() throws Exception {
+        var server = MockBukkit.getMock(); Player player = server.addPlayer();
+        var rpcharacters = MockBukkit.createMockPlugin("RPCharacters"); var infestations = MockBukkit.createMockPlugin("Infestations");
+        var field = PlayerManager.class.getDeclaredField("data"); field.setAccessible(true);
+        List<PlayerData> loaded = (List<PlayerData>) field.get(null);
+        PlayerData data = mock(PlayerData.class); RPCharacter alice = mock(RPCharacter.class);
+        when(alice.getId()).thenReturn("alice"); when(data.getPlayer()).thenReturn(player);
+        when(data.getActiveCharacter()).thenReturn(alice); loaded.add(data);
+        // RPCharacters loads first and drops the data in PlayerManager.onLeave, a NORMAL priority listener.
+        server.getPluginManager().registerEvent(PlayerQuitEvent.class, new Listener() {}, EventPriority.NORMAL,
+                (listener, event) -> loaded.remove(data), rpcharacters);
+        try (var database = mockStatic(InfestationDatabase.class);
+                var export = mockStatic(InfestationMapExport.class)) {
+            InfestationManager manager = new InfestationManager(Infestations.plugin);
+            server.getPluginManager().registerEvents(manager, infestations);
+            manager.set(1, "zombies", Severity.MILD);
+            manager.get(1).getCommitted().add(player.getUniqueId());
+            server.getPluginManager().callEvent(new PlayerQuitEvent(player, net.kyori.adventure.text.Component.empty()));
+            assertFalse(loaded.contains(data));
+            assertEquals(Map.of(player.getUniqueId(), "alice"), manager.get(1).getLogoutCharacter());
+        } finally {
+            loaded.remove(data);
+        }
+    }
     @Test void characterActivationAppliesPendingDeathsForOnlineOwners() {
         InfestationManager manager = mock(InfestationManager.class);
         CharacterActivatedListener listener = new CharacterActivatedListener(manager);
@@ -87,7 +115,7 @@ class InfestationsServicesTest {
         listener.onCharacterActivated(new CharacterActivatedEvent(null, UUID.randomUUID(), character, null));
         verifyNoInteractions(manager);
         listener.onCharacterActivated(new CharacterActivatedEvent(owner, UUID.randomUUID(), character, null));
-        verify(manager).applyDeathOnLogin(owner);
+        verify(manager).characterReturned(owner);
     }
     @Test void provinceAdaptersHandleUnavailableDependenciesAndKnownTerrain() {
         try (var sf = mockStatic(SimpleFactions.class); var rest = mockStatic(RestServer.class)) {

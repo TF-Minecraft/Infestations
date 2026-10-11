@@ -5,7 +5,7 @@ import org.bukkit.event.Listener;
 
 import net.tfminecraft.rpcharacters.lifecycle.CharacterActivatedEvent;
 
-/** Registered only with RPCharacters: a pending death applies once its character is active again. */
+/** Registered only with RPCharacters: a character's lure grace ends, or its pending death applies, once active. */
 public final class CharacterActivatedListener implements Listener {
 
     private final InfestationManager manager;
@@ -17,7 +17,7 @@ public final class CharacterActivatedListener implements Listener {
     @EventHandler
     public void onCharacterActivated(CharacterActivatedEvent event) {
         if (event.getOwner() != null) {
-            manager.applyDeathOnLogin(event.getOwner());
+            manager.characterReturned(event.getOwner());
         }
     }
 }
