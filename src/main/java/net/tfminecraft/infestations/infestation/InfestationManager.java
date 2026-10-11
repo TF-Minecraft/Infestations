@@ -640,7 +640,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) {
                 continue;
             }
-            if (Provinces.at(player) == infestation.getProvinceId() || heldByOtherCharacter(infestation, player)) {
+            if (Provinces.at(player) == infestation.getProvinceId() || notAnswerable(infestation, player)) {
                 continue;
             }
             actionBar(player, bar);
@@ -716,6 +716,16 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         return Characters.enabled() && !infestation.getLogoutCharacter().containsKey(id);
     }
 
+    /** An unidentified death already owed: it is held, brings no deserter penalties and keeps no lure alive. */
+    private static boolean isHeldDebt(Infestation infestation, UUID id) {
+        return infestation.getDeathOnLogin().contains(id) && isUnidentified(infestation, id);
+    }
+
+    /** True when the outside warnings and deserter damage skip this committed player. */
+    private static boolean notAnswerable(Infestation infestation, Player player) {
+        return heldByOtherCharacter(infestation, player) || isHeldDebt(infestation, player.getUniqueId());
+    }
+
     private void warnUnidentifiedDeaths() {
         for (Infestation infestation : byProvince.values()) {
             for (UUID id : infestation.getDeathOnLogin()) {
@@ -742,14 +752,20 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         failLure(infestation);
     }
 
+    /** Held debts and their commitments are left out, since no character can return to settle them. */
     private boolean hasLivingOrGrace(Infestation infestation) {
         if (!infestation.getLogoutGraceUntil().isEmpty()) {
             return true;
         }
-        if (!infestation.getDeathOnLogin().isEmpty()) {
-            return true;
+        for (UUID id : infestation.getDeathOnLogin()) {
+            if (!isUnidentified(infestation, id)) {
+                return true;
+            }
         }
         for (UUID id : infestation.getCommitted()) {
+            if (isHeldDebt(infestation, id)) {
+                continue;
+            }
             Player player = Bukkit.getPlayer(id);
             if (player != null && player.isOnline() && !player.isDead()) {
                 return true;
@@ -1231,7 +1247,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             return;
         }
         Player player = event.getPlayer();
-        if (!infestation.isCommitted(player.getUniqueId()) || heldByOtherCharacter(infestation, player)) {
+        if (!infestation.isCommitted(player.getUniqueId()) || notAnswerable(infestation, player)) {
             return;
         }
         if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) {

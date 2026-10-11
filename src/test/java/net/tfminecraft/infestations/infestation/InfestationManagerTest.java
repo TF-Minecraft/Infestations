@@ -27,6 +27,7 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.scheduler.BukkitScheduler;
 import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.MockedConstruction;
@@ -894,6 +895,42 @@ class InfestationManagerTest {
         assertTrue(grace.getLogoutGraceUntil().isEmpty()); assertTrue(grace.getLogoutCharacter().isEmpty());
         call("tickOutsideCommitted", grace); verify(p).damage(2.0);
         assertTrue(manager.leaveLure(p)); assertFalse(grace.isCommitted(id));
+    }
+
+    @Test void unidentifiedDebtsBringNoDeserterPenaltiesWhileRPCharactersRuns() throws Exception {
+        Infestation legacy = lure(1, LurePhase.ACTIVE);
+        Player p = player(2); UUID id = p.getUniqueId(); legacy.getCommitted().add(id); legacy.getDeathOnLogin().add(id);
+        characters.when(Characters::enabled).thenReturn(true);
+        characters.when(() -> Characters.activeId(p)).thenReturn("bob");
+        atTick(100); call("tickOutsideCommitted", legacy);
+        PlayerProvinceLeaveEvent leave = mock(PlayerProvinceLeaveEvent.class);
+        when(leave.getPlayer()).thenReturn(p); when(leave.getProvinceId()).thenReturn(1);
+        manager.onLeaveProvince(leave);
+        verify(p, never()).damage(anyDouble()); verify(p, never()).sendMessage("lure-outside");
+        characters.when(Characters::enabled).thenReturn(false);
+        call("tickOutsideCommitted", legacy); verify(p).damage(2.0);
+    }
+
+    @Test void unidentifiedDebtsDoNotKeepTheLureAliveAcrossSaveAndLoad(@TempDir java.nio.file.Path dir) {
+        Infestation legacy = lure(1, LurePhase.ACTIVE);
+        Player p = player(1); UUID id = p.getUniqueId(), offline = UUID.randomUUID(), tagged = UUID.randomUUID();
+        legacy.getCommitted().addAll(List.of(id, offline, tagged)); legacy.getDeathOnLogin().addAll(List.of(id, offline, tagged));
+        legacy.getLogoutCharacter().put(tagged, "carol");
+        characters.when(Characters::enabled).thenReturn(true);
+        characters.when(() -> Characters.activeId(p)).thenReturn("bob");
+        mocks.remove(database); database.close();
+        when(plugin.getDataFolder()).thenReturn(dir.toFile());
+        manager.save(); manager.start();
+        Infestation loaded = manager.get(1);
+        assertNotSame(legacy, loaded); assertEquals(Set.of(id, offline, tagged), loaded.getDeathOnLogin());
+        call("checkWipe", loaded); assertEquals(LurePhase.ACTIVE, loaded.getPhase());
+        loaded.getDeathOnLogin().remove(tagged); loaded.getCommitted().remove(tagged); loaded.getLogoutCharacter().clear();
+        manager.save(); manager.start(); loaded = manager.get(1);
+        assertEquals(Set.of(id, offline), loaded.getDeathOnLogin()); assertEquals(LurePhase.ACTIVE, loaded.getPhase());
+        call("checkWipe", loaded);
+        assertEquals(LurePhase.NONE, loaded.getPhase());
+        assertTrue(loaded.getCommitted().isEmpty()); assertTrue(loaded.getDeathOnLogin().isEmpty());
+        verify(p).sendMessage("lure-fail"); verify(plugin.getLogger(), atLeastOnce()).warning(contains(id.toString()));
     }
 
     @Test void unidentifiedDeathsAreHeldWithAWarningWhileRPCharactersRuns() {
