@@ -1,46 +1,46 @@
 package net.tfminecraft.infestations.utils;
 
-import org.bukkit.Bukkit;
+import java.util.UUID;
+
 import org.bukkit.entity.Player;
 
-import net.tfminecraft.rpcharacters.enums.Status;
-import net.tfminecraft.rpcharacters.managers.PlayerManager;
-import net.tfminecraft.rpcharacters.objects.PlayerData;
-import net.tfminecraft.rpcharacters.objects.RPCharacter;
+import net.tfminecraft.tlibs.character.CharacterSession;
 
-/** RPCharacters lookups; without RPCharacters every player has no character ID. */
+/** Shared identity lookups; unavailable and not ready are distinct from standalone play. */
 public final class Characters {
 
     private Characters() {}
 
     public static boolean enabled() {
-        return Bukkit.getPluginManager().isPluginEnabled("RPCharacters");
+        return net.tfminecraft.tlibs.character.Characters.available();
     }
 
-    /** The player's active character ID, or null. */
+    public static CharacterSession session(Player player) {
+        return net.tfminecraft.tlibs.character.Characters.currentSession(player).orElse(null);
+    }
+
+    public static boolean isCurrent(CharacterSession session) {
+        return net.tfminecraft.tlibs.character.Characters.isCurrent(session);
+    }
+
     public static String activeId(Player player) {
-        if (!enabled()) {
-            return null;
-        }
-        PlayerData data = PlayerManager.get(player);
-        RPCharacter character = data == null ? null : data.getActiveCharacter();
-        return character == null ? null : character.getId();
+        CharacterSession session = session(player);
+        return session == null ? null : session.ref().characterId().toString();
     }
 
-    /** True when the player's character with this ID exists and is no longer alive. */
+    /** Preserves the lure's existing DEAD/MISSING settlement rule, with verified ownership. */
     public static boolean isDead(Player player, String characterId) {
-        if (!enabled()) {
+        UUID id;
+        try {
+            id = UUID.fromString(characterId);
+        } catch (IllegalArgumentException ex) {
             return false;
         }
-        PlayerData data = PlayerManager.get(player);
-        if (data == null) {
+        if (!id.toString().equalsIgnoreCase(characterId)) {
             return false;
         }
-        for (RPCharacter character : data.getCharacters()) {
-            if (characterId.equals(character.getId())) {
-                return character.getStatus() != Status.ALIVE;
-            }
-        }
-        return false;
+        return net.tfminecraft.tlibs.character.Characters.info(id)
+                .filter(info -> info.ref().ownerId().equals(player.getUniqueId()))
+                .map(info -> !info.alive()).orElse(false);
     }
 }

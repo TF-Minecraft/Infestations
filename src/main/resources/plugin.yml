@@ -4,7 +4,6 @@ name: Infestations
 version: '${project.version}'
 author: Drefvelin
 depend: [TLibs, SimpleFactions, MythicMobs, ItemsAdder, InteractibleFurniture]
-softdepend: [RPCharacters]
 
 commands:
   infestation:

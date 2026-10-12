@@ -11,10 +11,14 @@ import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.UUID;
 import java.util.logging.Logger;
 
+import org.bukkit.Server;
 import org.bukkit.event.HandlerList;
 import org.bukkit.plugin.PluginDescriptionFile;
+import org.bukkit.plugin.PluginManager;
+import org.bukkit.plugin.ServicePriority;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.MockedConstruction;
@@ -22,8 +26,13 @@ import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 
 import net.tfminecraft.infestations.cache.Cache;
-import net.tfminecraft.infestations.infestation.CharacterActivatedListener;
 import net.tfminecraft.infestations.infestation.InfestationManager;
+import net.tfminecraft.tlibs.character.CharacterIdentity;
+import net.tfminecraft.tlibs.character.CharacterRef;
+import net.tfminecraft.tlibs.character.CharacterSession;
+import net.tfminecraft.tlibs.character.CharacterSessionEndEvent;
+import net.tfminecraft.tlibs.character.CharacterSessionStartEvent;
+import net.tfminecraft.tlibs.character.Characters;
 
 class InfestationsLifecycleTest {
     @TempDir Path directory;
@@ -52,6 +61,7 @@ class InfestationsLifecycleTest {
 
     @AfterEach void cleanup() throws Exception {
         try {
+            if (plugin != null) HandlerList.unregisterAll(plugin);
             MockBukkit.unmock();
         } finally {
             if (managers != null) managers.close();
@@ -83,13 +93,58 @@ class InfestationsLifecycleTest {
         plugin.onDisable(); verify(plugin.getInfestationManager()).shutdown();
     }
 
-    @Test void characterListenerIsRegisteredOnlyWithRPCharacters() {
-        assertFalse(HandlerList.getRegisteredListeners(plugin).stream()
-                .anyMatch(l -> l.getListener() instanceof CharacterActivatedListener));
-        MockBukkit.createMockPlugin("RPCharacters");
-        plugin.onEnable();
+    @Test void missingSharedCharacterApiDisablesBeforeInitializingManagerOrConfig() {
+        Infestations startup = mock(Infestations.class);
+        Server startupServer = mock(Server.class);
+        PluginManager plugins = mock(PluginManager.class);
+        Logger logger = mock(Logger.class);
+        when(startup.getServer()).thenReturn(startupServer);
+        when(startupServer.getPluginManager()).thenReturn(plugins);
+        when(startup.getLogger()).thenReturn(logger);
+        doCallRealMethod().when(startup).onEnable();
+        int managersBefore = managers.constructed().size();
+        try (var characters = mockStatic(Characters.class)) {
+            characters.when(Characters::available).thenThrow(new NoClassDefFoundError("CharacterIdentity"));
+
+            assertDoesNotThrow(startup::onEnable);
+
+            assertEquals(managersBefore, managers.constructed().size());
+            assertSame(plugin, Infestations.plugin);
+            verify(logger).severe("Infestations requires TLibs 2.3.0 or newer. Update TLibs and restart the server.");
+            verify(plugins).disablePlugin(startup);
+            verify(startup, never()).getDataFolder();
+            verify(startup, never()).getResource(anyString());
+            verify(startup, never()).getCommand(anyString());
+        }
+    }
+
+    @Test void sharedCharacterHandlersRegisterWithoutAProviderAndRemainReadyForLaterRegistration() {
+        InfestationManager manager = plugin.getInfestationManager();
+        assertFalse(Characters.available());
         assertTrue(HandlerList.getRegisteredListeners(plugin).stream()
-                .anyMatch(l -> l.getListener() instanceof CharacterActivatedListener));
+                .anyMatch(l -> l.getListener() == manager));
+        var player = server.addPlayer();
+        CharacterSession session = new CharacterSession(new CharacterRef(player.getUniqueId(), UUID.randomUUID()), 1);
+        CharacterSessionStartEvent start = new CharacterSessionStartEvent(player, session);
+        CharacterSessionEndEvent end = new CharacterSessionEndEvent(player, session, CharacterSessionEndEvent.Reason.SWITCH);
+        server.getPluginManager().callEvent(start);
+        server.getPluginManager().callEvent(end);
+        verify(manager).onCharacterStart(start);
+        verify(manager).onCharacterEnd(end);
+
+        var providerPlugin = MockBukkit.createMockPlugin("IdentityProvider");
+        CharacterIdentity provider = mock(CharacterIdentity.class);
+        try {
+            server.getServicesManager().register(CharacterIdentity.class, provider, providerPlugin, ServicePriority.Normal);
+            assertTrue(Characters.available());
+            server.getPluginManager().callEvent(start);
+            server.getPluginManager().callEvent(end);
+            verify(manager, times(2)).onCharacterStart(start);
+            verify(manager, times(2)).onCharacterEnd(end);
+        } finally {
+            HandlerList.unregisterAll(providerPlugin);
+            server.getServicesManager().unregisterAll(providerPlugin);
+        }
     }
 
     @Test void reloadAppliesCurrentConfigAndReportsDebugSettingsWithoutReplacingFiles() throws Exception {

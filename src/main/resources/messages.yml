@@ -36,3 +36,5 @@ lure-victory: "{prefix}#7dba7aThe infestation is cleared."
 lure-fail: "{prefix}#c45c5cThe lure failed. The infestation remains."
 hologram-joining: "#c9a44aLure - join {seconds}s"
 hologram-remaining: "#c45c5cRemaining: #f0e6d0{remaining}"
+
+character-required: "{prefix}&cYour character must be ready before joining a lure."
