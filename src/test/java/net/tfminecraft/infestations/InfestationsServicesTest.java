@@ -111,7 +111,7 @@ class InfestationsServicesTest {
         }
     }
     @ParameterizedTest
-    @EnumSource(value = Reason.class, names = {"SWITCH", "QUIT", "SHUTDOWN"})
+    @EnumSource(value = Reason.class, names = {"SWITCH", "QUIT"})
     void sharedEndRecordsTheInvalidatedOutgoingCharacterAndPreservesPriorDebt(Reason reason) {
         Player player = MockBukkit.getMock().addPlayer();
         try (CharacterProvider provider = new CharacterProvider();
@@ -137,6 +137,21 @@ class InfestationsServicesTest {
             assertEquals(Map.of(owner, 1234L), previous.getLogoutGraceUntil());
             Bukkit.getPluginManager().callEvent(new PlayerQuitEvent(player, net.kyori.adventure.text.Component.empty()));
             assertEquals(deadline, current.getLogoutGraceUntil().get(owner));
+        }
+    }
+    @Test void sharedShutdownEndRecordsNoDeparture() {
+        Player player = MockBukkit.getMock().addPlayer();
+        try (CharacterProvider provider = new CharacterProvider();
+                var database = mockStatic(InfestationDatabase.class);
+                var export = mockStatic(InfestationMapExport.class)) {
+            InfestationManager manager = registeredManager(provider);
+            Infestation lure = commitment(manager, 1, player);
+            CharacterSession outgoing = provider.activate(player, UUID.randomUUID());
+            provider.invalidate(player);
+            Bukkit.getPluginManager().callEvent(new CharacterSessionEndEvent(player, outgoing, Reason.SHUTDOWN));
+            assertTrue(lure.isCommitted(player.getUniqueId()));
+            assertTrue(lure.getLogoutCharacter().isEmpty());
+            assertTrue(lure.getLogoutGraceUntil().isEmpty());
         }
     }
     @Test void sharedDeathSettlesOnlyTheOutgoingCharactersCommitmentsAfterInvalidation() {

@@ -1094,18 +1094,19 @@ class InfestationManagerTest {
         assertEquals(LurePhase.NONE, lure.getPhase());
     }
 
-    @Test void shutdownRecordsReadyCommitmentsBeforeProviderDisablesWithoutExtendingGrace() {
-        Player p = player(1); UUID id = p.getUniqueId(); player(2);
+    @Test void restartIsNotADepartureSoTheEmptyLureFailsWithoutPenalty() {
+        Player p = player(1); UUID id = p.getUniqueId();
         Infestation lure = lure(1, LurePhase.ACTIVE); lure.getCommitted().add(id);
         characters.when(Characters::enabled).thenReturn(true); current(p, ALICE);
         manager.shutdown();
-        assertEquals(ALICE, lure.getLogoutCharacter().get(id));
-        long deadline = lure.getLogoutGraceUntil().get(id);
-        manager.shutdown();
-        assertEquals(deadline, lure.getLogoutGraceUntil().get(id));
-        characters.when(Characters::enabled).thenReturn(false);
-        manager.characterReturned(p);
-        assertEquals(ALICE, lure.getLogoutCharacter().get(id));
+        end(p, CharacterSessionEndEvent.Reason.SHUTDOWN);
+        assertTrue(lure.getLogoutGraceUntil().isEmpty());
+        assertTrue(lure.getLogoutCharacter().isEmpty());
+        assertTrue(lure.getDeathOnLogin().isEmpty());
+        online.remove(id); when(p.isOnline()).thenReturn(false);
+        call("checkWipe", lure);
+        assertFalse(lure.isCommitted(id));
+        assertEquals(LurePhase.NONE, lure.getPhase());
     }
 
     @Test void loadedCharacterTagsEnableStickyTrackingWithoutAProvider() {

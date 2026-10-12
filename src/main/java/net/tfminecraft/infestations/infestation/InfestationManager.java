@@ -117,14 +117,6 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
     }
 
     public void shutdown() {
-        if (usesCharacters()) {
-            for (Player player : Bukkit.getOnlinePlayers()) {
-                CharacterSession session = Characters.session(player);
-                if (session != null) {
-                    recordDeparture(player.getUniqueId(), session.ref().characterId().toString());
-                }
-            }
-        }
         if (task != null) {
             task.cancel();
             task = null;
@@ -1207,6 +1199,10 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
     public void onCharacterEnd(CharacterSessionEndEvent event) {
         characterTracking = true;
         CharacterSession session = event.getSession();
+        if (event.getReason() == CharacterSessionEndEvent.Reason.SHUTDOWN) {
+            // A restart is not a departure: with nobody back, the lure fails without penalty.
+            return;
+        }
         if (event.getReason() == CharacterSessionEndEvent.Reason.DEATH) {
             settleDeath(session.ref().ownerId(), session.ref().characterId().toString());
         } else {
