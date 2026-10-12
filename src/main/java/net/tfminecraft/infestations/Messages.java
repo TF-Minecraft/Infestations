@@ -42,6 +42,11 @@ public final class Messages {
         return format(raw);
     }
 
+    /** For keys that a messages.yml from an older release may lack. */
+    public static String getOrDefault(String path, String fallback) {
+        return format(applyPrefix(config != null ? config.getString(path, fallback) : fallback));
+    }
+
     public static String getRaw(String path) {
         if (config == null) {
             return path;

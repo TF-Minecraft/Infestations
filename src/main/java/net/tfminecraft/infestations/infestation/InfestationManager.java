@@ -55,6 +55,8 @@ import net.tfminecraft.simplefactions.events.PlayerProvinceEnterEvent;
 import net.tfminecraft.simplefactions.events.PlayerProvinceLeaveEvent;
 import net.tfminecraft.tlibs.TLibs;
 import net.tfminecraft.tlibs.character.CharacterSession;
+import net.tfminecraft.tlibs.character.CharacterDeathEvent;
+import net.tfminecraft.tlibs.character.CharacterRef;
 import net.tfminecraft.tlibs.character.CharacterSessionEndEvent;
 import net.tfminecraft.tlibs.character.CharacterSessionStartEvent;
 import net.tfminecraft.infestations.Infestations;
@@ -881,9 +883,8 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
 
     private boolean readyToJoin(Player player) {
         if (usesCharacters() && Characters.session(player) == null) {
-            String message = Messages.get("character-required");
-            player.sendMessage("character-required".equals(message)
-                    ? "Your character must be ready before joining a lure." : message);
+            player.sendMessage(Messages.getOrDefault("character-required",
+                    "{prefix}#c45c5cYour character must be ready before joining a lure."));
             return false;
         }
         return true;
@@ -1179,8 +1180,11 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
     }
 
     private void settleDeath(UUID id, String character) {
+        Player online = Bukkit.getPlayer(id);
+        String current = online == null ? null : Characters.activeId(online);
         for (Infestation infestation : List.copyOf(byProvince.values())) {
-            String owner = infestation.getLogoutCharacter().get(id);
+            // Without a recorded departure, the commitment belongs to the current character, if any.
+            String owner = infestation.getLogoutCharacter().getOrDefault(id, current);
             if (!infestation.isCommitted(id) || (owner != null && !owner.equalsIgnoreCase(character))) {
                 continue;
             }
@@ -1199,15 +1203,23 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
     public void onCharacterEnd(CharacterSessionEndEvent event) {
         characterTracking = true;
         CharacterSession session = event.getSession();
-        if (event.getReason() == CharacterSessionEndEvent.Reason.SHUTDOWN) {
-            // A restart is not a departure: with nobody back, the lure fails without penalty.
+        // A restart is not a departure: with nobody back, the lure fails without penalty.
+        // A death settles through onCharacterDeath once RPCharacters has saved it.
+        if (event.getReason() == CharacterSessionEndEvent.Reason.SHUTDOWN
+                || event.getReason() == CharacterSessionEndEvent.Reason.DEATH) {
             return;
         }
-        if (event.getReason() == CharacterSessionEndEvent.Reason.DEATH) {
-            settleDeath(session.ref().ownerId(), session.ref().characterId().toString());
-        } else {
-            recordDeparture(session.ref().ownerId(), session.ref().characterId().toString());
-            save();
+        recordDeparture(session.ref().ownerId(), session.ref().characterId().toString());
+        save();
+    }
+
+    /** Settles the dead character's commitments. A repeat, or a replay after a revival, changes nothing. */
+    @EventHandler
+    public void onCharacterDeath(CharacterDeathEvent event) {
+        characterTracking = true;
+        CharacterRef character = event.getCharacter();
+        if (Characters.isDead(character)) {
+            settleDeath(character.ownerId(), character.characterId().toString());
         }
     }
 
