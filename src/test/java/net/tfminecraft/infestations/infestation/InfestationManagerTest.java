@@ -54,6 +54,7 @@ import net.tfminecraft.interactiblefurniture.furniture.Furniture;
 import net.tfminecraft.simplefactions.events.PlayerProvinceEnterEvent;
 import net.tfminecraft.simplefactions.events.PlayerProvinceLeaveEvent;
 import net.tfminecraft.tlibs.TLibs;
+import net.tfminecraft.tlibs.character.CharacterDeathEvent;
 import net.tfminecraft.tlibs.character.CharacterRef;
 import net.tfminecraft.tlibs.character.CharacterSession;
 import net.tfminecraft.tlibs.character.CharacterSessionEndEvent;
@@ -1059,7 +1060,7 @@ class InfestationManagerTest {
         characters.when(Characters::enabled).thenReturn(true);
         call("tryJoin", p, lure);
         assertFalse(lure.isCommitted(id));
-        verify(p).sendMessage("Your character must be ready before joining a lure.");
+        verify(p).sendMessage("character-required");
         start(p, ALICE); call("tryJoin", p, lure);
         assertTrue(lure.isCommitted(id));
         CharacterSession old = sessions.get(id);
@@ -1081,31 +1082,61 @@ class InfestationManagerTest {
         assertTrue(manager.leaveLure(p));
     }
 
-    @Test void deathEndUsesInvalidatedOutgoingTokenAndDoesNotSettleAnotherCharacter() {
+    @Test void onlyTheSavedDeathOfTheDepartedCharacterSettlesItsLure() {
         Player p = player(1); UUID id = p.getUniqueId();
         Infestation lure = lure(1, LurePhase.ACTIVE);
         lure.getCommitted().add(id); lure.getLogoutCharacter().put(id, ALICE.toUpperCase(Locale.ROOT));
         lure.getDeathOnLogin().add(id);
         characters.when(Characters::enabled).thenReturn(true);
-        current(p, BOB); end(p, CharacterSessionEndEvent.Reason.DEATH);
-        assertTrue(lure.isCommitted(id));
         current(p, ALICE); end(p, CharacterSessionEndEvent.Reason.DEATH);
+        assertTrue(lure.isCommitted(id)); assertTrue(lure.getDeathOnLogin().contains(id));
+
+        characters.when(() -> Characters.isDead(any(CharacterRef.class))).thenReturn(true);
+        manager.onCharacterDeath(died(id, BOB));
+        assertTrue(lure.isCommitted(id));
+        characters.when(() -> Characters.isDead(any(CharacterRef.class))).thenReturn(false);
+        manager.onCharacterDeath(died(id, ALICE));
+        assertTrue(lure.isCommitted(id));
+
+        characters.when(() -> Characters.isDead(any(CharacterRef.class))).thenReturn(true);
+        manager.onCharacterDeath(died(id, ALICE));
         assertFalse(lure.isCommitted(id)); assertTrue(lure.getDeathOnLogin().isEmpty());
         assertEquals(LurePhase.NONE, lure.getPhase());
+        assertDoesNotThrow(() -> manager.onCharacterDeath(died(id, ALICE)));
     }
 
-    @Test void shutdownRecordsReadyCommitmentsBeforeProviderDisablesWithoutExtendingGrace() {
-        Player p = player(1); UUID id = p.getUniqueId(); player(2);
+    @Test void withoutADepartureOnlyTheCurrentOrJustEndedCharactersDeathSettles() {
+        Player p = player(1); UUID id = p.getUniqueId();
+        Infestation lure = lure(1, LurePhase.ACTIVE); lure.getCommitted().add(id);
+        characters.when(Characters::enabled).thenReturn(true);
+        characters.when(() -> Characters.isDead(any(CharacterRef.class))).thenReturn(true);
+        current(p, BOB);
+        manager.onCharacterDeath(died(id, ALICE));
+        assertTrue(lure.isCommitted(id));
+        end(p, CharacterSessionEndEvent.Reason.DEATH);
+        assertTrue(lure.isCommitted(id)); assertTrue(lure.getLogoutGraceUntil().isEmpty());
+        manager.onCharacterDeath(died(id, BOB));
+        assertFalse(lure.isCommitted(id));
+    }
+
+    private static CharacterDeathEvent died(UUID owner, String character) {
+        return new CharacterDeathEvent(new CharacterRef(owner, UUID.fromString(character)), UUID.randomUUID(),
+                java.time.Instant.now(), null, null, "LURE");
+    }
+
+    @Test void restartIsNotADepartureSoTheEmptyLureFailsWithoutPenalty() {
+        Player p = player(1); UUID id = p.getUniqueId();
         Infestation lure = lure(1, LurePhase.ACTIVE); lure.getCommitted().add(id);
         characters.when(Characters::enabled).thenReturn(true); current(p, ALICE);
         manager.shutdown();
-        assertEquals(ALICE, lure.getLogoutCharacter().get(id));
-        long deadline = lure.getLogoutGraceUntil().get(id);
-        manager.shutdown();
-        assertEquals(deadline, lure.getLogoutGraceUntil().get(id));
-        characters.when(Characters::enabled).thenReturn(false);
-        manager.characterReturned(p);
-        assertEquals(ALICE, lure.getLogoutCharacter().get(id));
+        end(p, CharacterSessionEndEvent.Reason.SHUTDOWN);
+        assertTrue(lure.getLogoutGraceUntil().isEmpty());
+        assertTrue(lure.getLogoutCharacter().isEmpty());
+        assertTrue(lure.getDeathOnLogin().isEmpty());
+        online.remove(id); when(p.isOnline()).thenReturn(false);
+        call("checkWipe", lure);
+        assertFalse(lure.isCommitted(id));
+        assertEquals(LurePhase.NONE, lure.getPhase());
     }
 
     @Test void loadedCharacterTagsEnableStickyTrackingWithoutAProvider() {

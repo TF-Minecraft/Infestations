@@ -4,6 +4,7 @@ import java.util.UUID;
 
 import org.bukkit.entity.Player;
 
+import net.tfminecraft.tlibs.character.CharacterRef;
 import net.tfminecraft.tlibs.character.CharacterSession;
 
 /** Shared identity lookups; unavailable and not ready are distinct from standalone play. */
@@ -39,8 +40,13 @@ public final class Characters {
         if (!id.toString().equalsIgnoreCase(characterId)) {
             return false;
         }
-        return net.tfminecraft.tlibs.character.Characters.info(id)
-                .filter(info -> info.ref().ownerId().equals(player.getUniqueId()))
+        return isDead(new CharacterRef(player.getUniqueId(), id));
+    }
+
+    /** Whether the provider still records this character of this account as not alive. */
+    public static boolean isDead(CharacterRef character) {
+        return net.tfminecraft.tlibs.character.Characters.info(character.characterId())
+                .filter(info -> info.ref().ownerId().equals(character.ownerId()))
                 .map(info -> !info.alive()).orElse(false);
     }
 }

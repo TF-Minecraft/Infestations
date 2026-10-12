@@ -9,6 +9,7 @@ import net.tfminecraft.infestations.map.InfestationMapExport;
 import net.tfminecraft.infestations.spawn.SpawnLog;
 import net.tfminecraft.infestations.utils.Characters;
 import net.tfminecraft.infestations.utils.Provinces;
+import net.tfminecraft.tlibs.character.CharacterDeathEvent;
 import net.tfminecraft.tlibs.character.CharacterIdentity;
 import net.tfminecraft.tlibs.character.CharacterInfo;
 import net.tfminecraft.tlibs.character.CharacterRef;
@@ -60,10 +61,13 @@ class InfestationsServicesTest {
         assertEquals("missing", Messages.getRaw("missing"));
         assertEquals("hello", Messages.get("hello"));
         assertEquals("", Messages.get(null));
+        assertEquals("§cfallback", Messages.getOrDefault("missing", "{prefix}&cfallback"));
         Path file = Files.writeString(directory.resolve("messages.yml"), "prefix: '&a[Infestations] '\ngreet: '{prefix}Hello {who}{blank}'\n");
         Messages.load(file.toFile());
         assertEquals("§a[Infestations] Hello Ryan", Messages.get("greet", "who", "Ryan", "blank", null, "unpaired"));
         assertEquals("missing", Messages.getRaw("missing"));
+        assertEquals("§a[Infestations] fallback", Messages.getOrDefault("missing", "{prefix}fallback"));
+        assertEquals("§a[Infestations] Hello {who}{blank}", Messages.getOrDefault("greet", "fallback"));
         Files.writeString(file, "invalid: [bad"); Messages.load(file.toFile());
         assertEquals("missing", Messages.get("missing"));
         Messages.load(directory.resolve("absent").toFile());
@@ -111,7 +115,7 @@ class InfestationsServicesTest {
         }
     }
     @ParameterizedTest
-    @EnumSource(value = Reason.class, names = {"SWITCH", "QUIT", "SHUTDOWN"})
+    @EnumSource(value = Reason.class, names = {"SWITCH", "QUIT"})
     void sharedEndRecordsTheInvalidatedOutgoingCharacterAndPreservesPriorDebt(Reason reason) {
         Player player = MockBukkit.getMock().addPlayer();
         try (CharacterProvider provider = new CharacterProvider();
@@ -139,7 +143,22 @@ class InfestationsServicesTest {
             assertEquals(deadline, current.getLogoutGraceUntil().get(owner));
         }
     }
-    @Test void sharedDeathSettlesOnlyTheOutgoingCharactersCommitmentsAfterInvalidation() {
+    @Test void sharedShutdownEndRecordsNoDeparture() {
+        Player player = MockBukkit.getMock().addPlayer();
+        try (CharacterProvider provider = new CharacterProvider();
+                var database = mockStatic(InfestationDatabase.class);
+                var export = mockStatic(InfestationMapExport.class)) {
+            InfestationManager manager = registeredManager(provider);
+            Infestation lure = commitment(manager, 1, player);
+            CharacterSession outgoing = provider.activate(player, UUID.randomUUID());
+            provider.invalidate(player);
+            Bukkit.getPluginManager().callEvent(new CharacterSessionEndEvent(player, outgoing, Reason.SHUTDOWN));
+            assertTrue(lure.isCommitted(player.getUniqueId()));
+            assertTrue(lure.getLogoutCharacter().isEmpty());
+            assertTrue(lure.getLogoutGraceUntil().isEmpty());
+        }
+    }
+    @Test void sharedDeathSettlesOnlyOnceSavedAndOnlyTheDeadCharactersCommitments() {
         Player player = MockBukkit.getMock().addPlayer();
         try (CharacterProvider provider = new CharacterProvider();
                 var database = mockStatic(InfestationDatabase.class);
@@ -157,8 +176,17 @@ class InfestationsServicesTest {
             other.getLogoutCharacter().put(owner, bob.toString());
             CharacterSession outgoing = provider.activate(player, alice);
             provider.invalidate(player);
-            assertFalse(Characters.isCurrent(outgoing));
+            // The session ends before RPCharacters saves the death; a failed save leaves the character alive.
             Bukkit.getPluginManager().callEvent(new CharacterSessionEndEvent(player, outgoing, Reason.DEATH));
+            for (Infestation infestation : List.of(matching, ongoing, other)) {
+                assertTrue(infestation.isCommitted(owner));
+            }
+            assertTrue(ongoing.getLogoutGraceUntil().isEmpty());
+
+            provider.describe(owner, alice, CharacterStatus.DEAD);
+            CharacterDeathEvent death = new CharacterDeathEvent(new CharacterRef(owner, alice), UUID.randomUUID(),
+                    java.time.Instant.now(), null, null, "LURE");
+            Bukkit.getPluginManager().callEvent(death);
             for (Infestation infestation : List.of(matching, ongoing)) {
                 assertFalse(infestation.isCommitted(owner));
                 assertTrue(infestation.getLogoutCharacter().isEmpty());
@@ -169,6 +197,13 @@ class InfestationsServicesTest {
             assertEquals(Map.of(owner, bob.toString()), other.getLogoutCharacter());
             assertEquals(Map.of(owner, 1234L), other.getLogoutGraceUntil());
             assertEquals(Set.of(owner), other.getDeathOnLogin());
+
+            // A replay after the character is revived and joins again settles nothing.
+            provider.describe(owner, alice, CharacterStatus.ALIVE);
+            provider.activate(player, alice);
+            matching.getCommitted().add(owner);
+            Bukkit.getPluginManager().callEvent(death);
+            assertTrue(matching.isCommitted(owner));
         }
     }
     @Test void sharedStartAppliesOnlyTheCurrentCharactersGraceAndDeath() {
