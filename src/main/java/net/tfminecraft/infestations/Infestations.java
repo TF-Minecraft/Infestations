@@ -10,11 +10,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import net.tfminecraft.infestations.cache.Cache;
 import net.tfminecraft.infestations.command.CommandManager;
-import net.tfminecraft.infestations.infestation.CharacterActivatedListener;
 import net.tfminecraft.infestations.infestation.InfestationManager;
 import net.tfminecraft.infestations.loader.ConfigLoader;
 import net.tfminecraft.infestations.loader.GroupLoader;
-import net.tfminecraft.infestations.utils.Characters;
 
 /**
  * Province infestations. See the Docs project guide for behaviour and configuration.
@@ -30,6 +28,13 @@ public class Infestations extends JavaPlugin {
 
     @Override
     public void onEnable() {
+        try {
+            net.tfminecraft.tlibs.character.Characters.available();
+        } catch (LinkageError error) {
+            getLogger().severe("Infestations requires TLibs 2.3.0 or newer. Update TLibs and restart the server.");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
         plugin = this;
         createFolders();
         createConfigs();
@@ -39,9 +44,6 @@ public class Infestations extends JavaPlugin {
 
         infestationManager = new InfestationManager(this);
         getServer().getPluginManager().registerEvents(infestationManager, this);
-        if (Characters.enabled()) {
-            getServer().getPluginManager().registerEvents(new CharacterActivatedListener(infestationManager), this);
-        }
         infestationManager.start();
 
         registerCommand("infestation");

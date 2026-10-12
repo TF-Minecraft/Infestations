@@ -9,11 +9,14 @@ import net.tfminecraft.infestations.map.InfestationMapExport;
 import net.tfminecraft.infestations.spawn.SpawnLog;
 import net.tfminecraft.infestations.utils.Characters;
 import net.tfminecraft.infestations.utils.Provinces;
-import net.tfminecraft.rpcharacters.enums.Status;
-import net.tfminecraft.rpcharacters.lifecycle.CharacterActivatedEvent;
-import net.tfminecraft.rpcharacters.managers.PlayerManager;
-import net.tfminecraft.rpcharacters.objects.PlayerData;
-import net.tfminecraft.rpcharacters.objects.RPCharacter;
+import net.tfminecraft.tlibs.character.CharacterIdentity;
+import net.tfminecraft.tlibs.character.CharacterInfo;
+import net.tfminecraft.tlibs.character.CharacterRef;
+import net.tfminecraft.tlibs.character.CharacterSession;
+import net.tfminecraft.tlibs.character.CharacterSessionEndEvent;
+import net.tfminecraft.tlibs.character.CharacterSessionEndEvent.Reason;
+import net.tfminecraft.tlibs.character.CharacterSessionStartEvent;
+import net.tfminecraft.tlibs.character.CharacterStatus;
 import net.tfminecraft.simplefactions.SimpleFactions;
 import net.tfminecraft.simplefactions.enums.Terrain;
 import net.tfminecraft.simplefactions.map.ProvinceGrid;
@@ -22,13 +25,18 @@ import net.tfminecraft.simplefactions.managers.ProvinceManager;
 import net.tfminecraft.simplefactions.rest.RestServer;
 import org.bukkit.*;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
+import org.bukkit.event.HandlerList;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.ServicePriority;
 import org.bukkit.scheduler.BukkitScheduler;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockbukkit.mockbukkit.MockBukkit;
+import org.mockbukkit.mockbukkit.entity.PlayerMock;
 import java.io.File;
 import java.nio.file.*;
 import java.util.*;
@@ -61,62 +69,244 @@ class InfestationsServicesTest {
         Messages.load(directory.resolve("absent").toFile());
         verify(logger, times(2)).severe(contains("Failed to load messages"));
     }
-    @Test @SuppressWarnings("unchecked") void characterLookupsNeedRPCharactersAndReadTheOwnersCharacters() throws Exception {
+    @Test void sharedCharacterLookupsRequireReadySessionsAndVerifyHistoricalOwnership() {
         Player player = MockBukkit.getMock().addPlayer();
-        assertNull(Characters.activeId(player)); assertFalse(Characters.isDead(player, "alice"));
-        MockBukkit.createMockPlugin("RPCharacters");
-        assertNull(Characters.activeId(player)); assertFalse(Characters.isDead(player, "alice"));
-        RPCharacter alice = mock(RPCharacter.class), bob = mock(RPCharacter.class);
-        when(alice.getId()).thenReturn("alice"); when(alice.getStatus()).thenReturn(Status.DEAD);
-        when(bob.getId()).thenReturn("bob"); when(bob.getStatus()).thenReturn(Status.ALIVE);
-        PlayerData data = mock(PlayerData.class);
-        when(data.getPlayer()).thenReturn(player); when(data.getCharacters()).thenReturn(List.of(alice, bob));
-        var field = PlayerManager.class.getDeclaredField("data"); field.setAccessible(true);
-        List<PlayerData> loaded = (List<PlayerData>) field.get(null);
-        loaded.add(data);
-        try {
+        UUID alice = UUID.fromString("ABCDEF00-0000-0000-0000-000000000001");
+        assertFalse(Characters.enabled());
+        assertNull(Characters.session(player));
+        assertNull(Characters.activeId(player));
+        assertFalse(Characters.isDead(player, alice.toString()));
+        try (CharacterProvider provider = new CharacterProvider()) {
+            assertTrue(Characters.enabled());
+            assertNull(Characters.session(player));
             assertNull(Characters.activeId(player));
-            when(data.getActiveCharacter()).thenReturn(bob);
-            assertEquals("bob", Characters.activeId(player));
-            assertTrue(Characters.isDead(player, "alice")); assertFalse(Characters.isDead(player, "bob"));
-            assertFalse(Characters.isDead(player, "carol"));
-        } finally {
-            loaded.remove(data);
+            CharacterSession first = provider.activate(player, alice);
+            assertEquals(first, Characters.session(player));
+            assertEquals("abcdef00-0000-0000-0000-000000000001", Characters.activeId(player));
+            assertTrue(Characters.isCurrent(first));
+            provider.invalidate(player);
+            assertFalse(Characters.isCurrent(first));
+            assertNull(Characters.activeId(player));
+            CharacterSession next = provider.activate(player, alice);
+            assertNotEquals(first, next);
+            assertFalse(Characters.isCurrent(first));
+            assertTrue(Characters.isCurrent(next));
+
+            for (CharacterStatus status : CharacterStatus.values()) {
+                provider.describe(player.getUniqueId(), alice, status);
+                assertEquals(status != CharacterStatus.ALIVE, Characters.isDead(player, alice.toString()), status.name());
+            }
+            provider.describe(UUID.randomUUID(), alice, CharacterStatus.DEAD);
+            assertFalse(Characters.isDead(player, alice.toString()));
+            assertFalse(Characters.isDead(player, UUID.randomUUID().toString()));
+            assertFalse(Characters.isDead(player, "malformed-character"));
+            UUID shortId = UUID.fromString("1-1-1-1-1");
+            provider.describe(player.getUniqueId(), shortId, CharacterStatus.DEAD);
+            assertFalse(Characters.isDead(player, "1-1-1-1-1"));
+            provider.unregister();
+            assertFalse(Characters.enabled());
+            assertNull(Characters.session(player));
+            assertFalse(Characters.isCurrent(next));
+            assertFalse(Characters.isDead(player, alice.toString()));
         }
     }
-    @Test @SuppressWarnings("unchecked") void quitRecordsTheCharacterBeforeRPCharactersDropsItsData() throws Exception {
-        var server = MockBukkit.getMock(); Player player = server.addPlayer();
-        var rpcharacters = MockBukkit.createMockPlugin("RPCharacters"); var infestations = MockBukkit.createMockPlugin("Infestations");
-        var field = PlayerManager.class.getDeclaredField("data"); field.setAccessible(true);
-        List<PlayerData> loaded = (List<PlayerData>) field.get(null);
-        PlayerData data = mock(PlayerData.class); RPCharacter alice = mock(RPCharacter.class);
-        when(alice.getId()).thenReturn("alice"); when(data.getPlayer()).thenReturn(player);
-        when(data.getActiveCharacter()).thenReturn(alice); loaded.add(data);
-        // RPCharacters loads first and drops the data in PlayerManager.onLeave, a NORMAL priority listener.
-        server.getPluginManager().registerEvent(PlayerQuitEvent.class, new Listener() {}, EventPriority.NORMAL,
-                (listener, event) -> loaded.remove(data), rpcharacters);
-        try (var database = mockStatic(InfestationDatabase.class);
+    @ParameterizedTest
+    @EnumSource(value = Reason.class, names = {"SWITCH", "QUIT", "SHUTDOWN"})
+    void sharedEndRecordsTheInvalidatedOutgoingCharacterAndPreservesPriorDebt(Reason reason) {
+        Player player = MockBukkit.getMock().addPlayer();
+        try (CharacterProvider provider = new CharacterProvider();
+                var database = mockStatic(InfestationDatabase.class);
                 var export = mockStatic(InfestationMapExport.class)) {
-            InfestationManager manager = new InfestationManager(Infestations.plugin);
-            server.getPluginManager().registerEvents(manager, infestations);
-            manager.set(1, "zombies", Severity.MILD);
-            manager.get(1).getCommitted().add(player.getUniqueId());
-            server.getPluginManager().callEvent(new PlayerQuitEvent(player, net.kyori.adventure.text.Component.empty()));
-            assertFalse(loaded.contains(data));
-            assertEquals(Map.of(player.getUniqueId(), "alice"), manager.get(1).getLogoutCharacter());
-        } finally {
-            loaded.remove(data);
+            InfestationManager manager = registeredManager(provider);
+            UUID owner = player.getUniqueId(), alice = UUID.randomUUID(), bob = UUID.randomUUID();
+            Infestation current = commitment(manager, 1, player);
+            Infestation previous = commitment(manager, 2, player);
+            previous.getLogoutCharacter().put(owner, bob.toString());
+            previous.getLogoutGraceUntil().put(owner, 1234L);
+            CharacterSession outgoing = provider.activate(player, alice);
+            provider.invalidate(player);
+            assertNull(Characters.session(player));
+            assertFalse(Characters.isCurrent(outgoing));
+
+            long before = System.currentTimeMillis();
+            Bukkit.getPluginManager().callEvent(new CharacterSessionEndEvent(player, outgoing, reason));
+            assertEquals(alice.toString(), current.getLogoutCharacter().get(owner));
+            long deadline = current.getLogoutGraceUntil().get(owner);
+            assertTrue(deadline >= before + Cache.logoutGraceSeconds * 1000L);
+            assertEquals(Map.of(owner, bob.toString()), previous.getLogoutCharacter());
+            assertEquals(Map.of(owner, 1234L), previous.getLogoutGraceUntil());
+            Bukkit.getPluginManager().callEvent(new PlayerQuitEvent(player, net.kyori.adventure.text.Component.empty()));
+            assertEquals(deadline, current.getLogoutGraceUntil().get(owner));
         }
     }
-    @Test void characterActivationAppliesPendingDeathsForOnlineOwners() {
-        InfestationManager manager = mock(InfestationManager.class);
-        CharacterActivatedListener listener = new CharacterActivatedListener(manager);
-        RPCharacter character = mock(RPCharacter.class); Player owner = mock(Player.class);
-        listener.onCharacterActivated(new CharacterActivatedEvent(null, UUID.randomUUID(), character, null));
-        verifyNoInteractions(manager);
-        listener.onCharacterActivated(new CharacterActivatedEvent(owner, UUID.randomUUID(), character, null));
-        verify(manager).characterReturned(owner);
+    @Test void sharedDeathSettlesOnlyTheOutgoingCharactersCommitmentsAfterInvalidation() {
+        Player player = MockBukkit.getMock().addPlayer();
+        try (CharacterProvider provider = new CharacterProvider();
+                var database = mockStatic(InfestationDatabase.class);
+                var export = mockStatic(InfestationMapExport.class)) {
+            InfestationManager manager = registeredManager(provider);
+            UUID owner = player.getUniqueId(), alice = UUID.randomUUID(), bob = UUID.randomUUID();
+            Infestation matching = commitment(manager, 1, player);
+            Infestation ongoing = commitment(manager, 2, player);
+            Infestation other = commitment(manager, 3, player);
+            for (Infestation infestation : List.of(matching, other)) {
+                infestation.getLogoutGraceUntil().put(owner, 1234L);
+                infestation.getDeathOnLogin().add(owner);
+            }
+            matching.getLogoutCharacter().put(owner, alice.toString().toUpperCase(Locale.ROOT));
+            other.getLogoutCharacter().put(owner, bob.toString());
+            CharacterSession outgoing = provider.activate(player, alice);
+            provider.invalidate(player);
+            assertFalse(Characters.isCurrent(outgoing));
+            Bukkit.getPluginManager().callEvent(new CharacterSessionEndEvent(player, outgoing, Reason.DEATH));
+            for (Infestation infestation : List.of(matching, ongoing)) {
+                assertFalse(infestation.isCommitted(owner));
+                assertTrue(infestation.getLogoutCharacter().isEmpty());
+                assertTrue(infestation.getLogoutGraceUntil().isEmpty());
+                assertTrue(infestation.getDeathOnLogin().isEmpty());
+            }
+            assertTrue(other.isCommitted(owner));
+            assertEquals(Map.of(owner, bob.toString()), other.getLogoutCharacter());
+            assertEquals(Map.of(owner, 1234L), other.getLogoutGraceUntil());
+            assertEquals(Set.of(owner), other.getDeathOnLogin());
+        }
     }
+    @Test void sharedStartAppliesOnlyTheCurrentCharactersGraceAndDeath() {
+        Player player = actor();
+        try (CharacterProvider provider = new CharacterProvider();
+                var database = mockStatic(InfestationDatabase.class);
+                var export = mockStatic(InfestationMapExport.class)) {
+            InfestationManager manager = registeredManager(provider);
+            UUID owner = player.getUniqueId(), alice = UUID.randomUUID();
+            Infestation grace = commitment(manager, 1, player);
+            Infestation debt = commitment(manager, 2, player);
+            grace.getLogoutCharacter().put(owner, alice.toString());
+            grace.getLogoutGraceUntil().put(owner, Long.MAX_VALUE);
+            debt.getLogoutCharacter().put(owner, alice.toString());
+            debt.getDeathOnLogin().add(owner);
+            CharacterSession stale = provider.activate(player, alice);
+            CharacterSession bob = provider.activate(player, UUID.randomUUID());
+            Bukkit.getPluginManager().callEvent(new CharacterSessionStartEvent(player, stale));
+            Bukkit.getPluginManager().callEvent(new CharacterSessionStartEvent(player, bob));
+            assertEquals(Map.of(owner, Long.MAX_VALUE), grace.getLogoutGraceUntil());
+            assertEquals(Set.of(owner), debt.getDeathOnLogin());
+            verify(player, never()).damage(anyDouble());
+
+            CharacterSession returned = provider.activate(player, alice);
+            Bukkit.getPluginManager().callEvent(new CharacterSessionStartEvent(player, returned));
+            assertTrue(grace.getLogoutGraceUntil().isEmpty());
+            assertTrue(grace.getLogoutCharacter().isEmpty());
+            assertTrue(debt.getDeathOnLogin().isEmpty());
+            assertTrue(debt.getLogoutCharacter().isEmpty());
+            verify(player).damage(40.0);
+        }
+    }
+    @Test void unregisteringTheProviderHoldsTaggedPenaltiesInsteadOfUsingTheAccount() {
+        Player player = actor();
+        try (CharacterProvider provider = new CharacterProvider();
+                var database = mockStatic(InfestationDatabase.class);
+                var export = mockStatic(InfestationMapExport.class)) {
+            InfestationManager manager = registeredManager(provider);
+            UUID owner = player.getUniqueId(), alice = UUID.randomUUID();
+            CharacterSession session = provider.activate(player, alice);
+            Bukkit.getPluginManager().callEvent(new CharacterSessionStartEvent(player, session));
+            Infestation grace = commitment(manager, 1, player);
+            Infestation debt = commitment(manager, 2, player);
+            grace.getLogoutCharacter().put(owner, alice.toString());
+            grace.getLogoutGraceUntil().put(owner, Long.MAX_VALUE);
+            debt.getLogoutCharacter().put(owner, alice.toString());
+            debt.getDeathOnLogin().add(owner);
+            provider.unregister();
+
+            manager.characterReturned(player);
+            Bukkit.getPluginManager().callEvent(new CharacterSessionStartEvent(player, session));
+            Bukkit.getPluginManager().callEvent(new PlayerJoinEvent(player, net.kyori.adventure.text.Component.empty()));
+            Bukkit.getPluginManager().callEvent(new PlayerQuitEvent(player, net.kyori.adventure.text.Component.empty()));
+            assertFalse(manager.leaveLure(player));
+            verify(player, never()).damage(anyDouble());
+            assertEquals(Map.of(owner, Long.MAX_VALUE), grace.getLogoutGraceUntil());
+            assertEquals(Set.of(owner), debt.getDeathOnLogin());
+            for (Infestation infestation : List.of(grace, debt)) {
+                assertTrue(infestation.isCommitted(owner));
+                assertEquals(Map.of(owner, alice.toString()), infestation.getLogoutCharacter());
+            }
+        }
+    }
+    private InfestationManager registeredManager(CharacterProvider provider) {
+        InfestationManager manager = new InfestationManager(Infestations.plugin);
+        Bukkit.getPluginManager().registerEvents(manager, provider.plugin);
+        return manager;
+    }
+
+    private Infestation commitment(InfestationManager manager, int province, Player player) {
+        manager.set(province, "zombies", Severity.MILD);
+        Infestation infestation = manager.get(province);
+        infestation.getCommitted().add(player.getUniqueId());
+        return infestation;
+    }
+
+    private Player actor() {
+        PlayerMock player = spy(new PlayerMock(MockBukkit.getMock(), "Participant"));
+        doNothing().when(player).damage(anyDouble());
+        MockBukkit.getMock().addPlayer(player);
+        return player;
+    }
+
+    private static final class CharacterProvider implements CharacterIdentity, AutoCloseable {
+        private final Plugin plugin = MockBukkit.createMockPlugin("InfestationsIdentityTest");
+        private final Map<UUID, CharacterSession> sessions = new HashMap<>();
+        private final Map<UUID, CharacterInfo> directory = new HashMap<>();
+        private long nextSession;
+
+        private CharacterProvider() {
+            Bukkit.getServicesManager().register(CharacterIdentity.class, this, plugin, ServicePriority.Normal);
+        }
+
+        private CharacterSession activate(Player player, UUID characterId) {
+            CharacterSession session = new CharacterSession(new CharacterRef(player.getUniqueId(), characterId), ++nextSession);
+            sessions.put(player.getUniqueId(), session);
+            return session;
+        }
+
+        private void invalidate(Player player) {
+            sessions.remove(player.getUniqueId());
+        }
+
+        private void describe(UUID owner, UUID characterId, CharacterStatus status) {
+            directory.put(characterId, new CharacterInfo(new CharacterRef(owner, characterId),
+                    "Character", status, null, Set.of(), 0, null));
+        }
+
+        @Override public Optional<CharacterSession> currentSession(Player player) {
+            return player != null && player.isOnline()
+                    ? Optional.ofNullable(sessions.get(player.getUniqueId())) : Optional.empty();
+        }
+
+        @Override public boolean isCurrent(CharacterSession session) {
+            return session != null && session.equals(sessions.get(session.ref().ownerId()));
+        }
+
+        @Override public Optional<CharacterInfo> info(UUID characterId) {
+            return Optional.ofNullable(directory.get(characterId));
+        }
+
+        @Override public Optional<List<CharacterInfo>> characters(UUID ownerId) {
+            return Optional.of(directory.values().stream().filter(info -> info.ref().ownerId().equals(ownerId)).toList());
+        }
+
+        @Override public Optional<CharacterInfo> lastPlayed(UUID ownerId) { return Optional.empty(); }
+        @Override public String displayName(Player player) { return player.getName(); }
+
+        private void unregister() {
+            Bukkit.getServicesManager().unregister(CharacterIdentity.class, this);
+        }
+
+        @Override public void close() {
+            HandlerList.unregisterAll(plugin);
+            unregister();
+        }
+    }
+
     @Test void provinceAdaptersHandleUnavailableDependenciesAndKnownTerrain() {
         try (var sf = mockStatic(SimpleFactions.class); var rest = mockStatic(RestServer.class)) {
             assertEquals(-2, Provinces.at((Player)null)); assertEquals(-2, Provinces.at((Location)null));

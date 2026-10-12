@@ -12,6 +12,7 @@ import java.util.logging.Logger;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.entity.*;
+import org.bukkit.plugin.ServicesManager;
 import org.bukkit.scheduler.BukkitScheduler;
 import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.*;
@@ -32,6 +33,9 @@ import net.tfminecraft.infestations.infestation.*;
 import net.tfminecraft.infestations.loader.GroupLoader;
 import net.tfminecraft.infestations.loader.GroupLoader.GroupTune;
 import net.tfminecraft.infestations.utils.Provinces;
+import net.tfminecraft.tlibs.character.CharacterIdentity;
+import net.tfminecraft.tlibs.character.CharacterRef;
+import net.tfminecraft.tlibs.character.CharacterSession;
 
 class SpawnServicesTest {
     private final List<AutoCloseable> mocks = new ArrayList<>();
@@ -40,6 +44,7 @@ class SpawnServicesTest {
     private final List<Runnable> callbacks = new ArrayList<>();
     private final Map<Integer, Infestation> infestations = new HashMap<>();
     private final Map<List<Integer>, Material> blocks = new HashMap<>();
+    private final Map<UUID, CharacterSession> sessions = new HashMap<>();
     private Infestations previous;
     private int previousDistance;
     private Infestations plugin;
@@ -53,6 +58,8 @@ class SpawnServicesTest {
     private ThreadLocalRandom random;
     private AmbientSpawnService ambient;
     private AmbientSpawnService.CollectionInfestations collection;
+    private ServicesManager services;
+    private CharacterIdentity identity;
     private int floorY;
 
     @BeforeAll static void initializeRegistries() { MockBukkit.mock(); }
@@ -64,6 +71,16 @@ class SpawnServicesTest {
         manager = mock(InfestationManager.class); when(plugin.getInfestationManager()).thenReturn(manager);
         when(manager.get(anyInt())).thenAnswer(i -> infestations.get(i.getArgument(0)));
         bukkit = scoped(mockStatic(Bukkit.class));
+        bukkit.when(Bukkit::isPrimaryThread).thenReturn(true);
+        services = mock(ServicesManager.class);
+        bukkit.when(Bukkit::getServicesManager).thenReturn(services);
+        identity = mock(CharacterIdentity.class);
+        when(identity.currentSession(any())).thenAnswer(i ->
+                Optional.ofNullable(sessions.get(i.<Player>getArgument(0).getUniqueId())));
+        when(identity.isCurrent(any())).thenAnswer(i -> {
+            CharacterSession token = i.getArgument(0);
+            return token.equals(sessions.get(token.ref().ownerId()));
+        });
         groups = scoped(mockStatic(GroupLoader.class)); provinces = scoped(mockStatic(Provinces.class));
         log = scoped(mockStatic(SpawnLog.class));
         MockedStatic<ThreadLocalRandom> randomness = scoped(mockStatic(ThreadLocalRandom.class));
@@ -271,6 +288,82 @@ class SpawnServicesTest {
             assertEquals(0, state.getAmbientAlive()); log.verify(() -> SpawnLog.line(state, "Explorer", "unknown-mythic"));
         } else {
             spawner.verifyNoInteractions(); assertEquals(condition.equals("cap") ? 8 : 0, state.getAmbientAlive());
+        }
+    }
+
+    @Test void ambientDoesNotPlanOrScheduleBeforeCharacterSessionIsReady() {
+        Player p = player(); Infestation state = infestation(1);
+        MockedStatic<SpawnPlanner> planner = planner(origin);
+        when(services.load(CharacterIdentity.class)).thenReturn(identity);
+        ambient.spawnAround(p, state, 1);
+        assertTrue(callbacks.isEmpty());
+        planner.verifyNoInteractions();
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"current", "switch", "switch-back", "provider-lost", "reconnect"})
+    void delayedAmbientSpawnBelongsToCapturedReadySession(String change) {
+        Player p = player(); Infestation state = infestation(1);
+        Location spot = new Location(world, 20, 64, 20); planner(spot);
+        MockedStatic<MythicSpawner> spawner = scoped(mockStatic(MythicSpawner.class));
+        LivingEntity spawned = mock(LivingEntity.class);
+        spawner.when(() -> MythicSpawner.spawn(spot, "zombies", 1, Keys.KIND_AMBIENT)).thenReturn(spawned);
+        CharacterSession original = new CharacterSession(new CharacterRef(p.getUniqueId(), UUID.randomUUID()), 1);
+        sessions.put(p.getUniqueId(), original);
+        when(services.load(CharacterIdentity.class)).thenReturn(identity);
+        ambient.spawnAround(p, state, 1);
+        assertEquals(1, callbacks.size());
+        switch (change) {
+            case "switch", "switch-back" -> {
+                sessions.put(p.getUniqueId(), new CharacterSession(
+                        new CharacterRef(p.getUniqueId(), UUID.randomUUID()), 2));
+                if (change.equals("switch-back")) {
+                    sessions.put(p.getUniqueId(), new CharacterSession(original.ref(), 3));
+                }
+            }
+            case "provider-lost" -> when(services.load(CharacterIdentity.class)).thenReturn(null);
+            case "reconnect" -> {
+                UUID ownerId = p.getUniqueId();
+                players.remove(p);
+                Player replacement = player();
+                when(replacement.getUniqueId()).thenReturn(ownerId);
+            }
+        }
+        runCallbacks();
+        if (change.equals("current")) {
+            spawner.verify(() -> MythicSpawner.spawn(spot, "zombies", 1, Keys.KIND_AMBIENT));
+            assertEquals(1, state.getAmbientAlive());
+        } else {
+            spawner.verifyNoInteractions();
+            assertEquals(0, state.getAmbientAlive());
+        }
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"unchanged", "provider-arrived", "reconnect"})
+    void delayedStandaloneAmbientSpawnRequiresSameConnectionAndNoProvider(String change) {
+        Player p = player(); Infestation state = infestation(1);
+        Location spot = new Location(world, 20, 64, 20); planner(spot);
+        MockedStatic<MythicSpawner> spawner = scoped(mockStatic(MythicSpawner.class));
+        spawner.when(() -> MythicSpawner.spawn(spot, "zombies", 1, Keys.KIND_AMBIENT))
+                .thenReturn(mock(LivingEntity.class));
+        ambient.spawnAround(p, state, 1);
+        assertEquals(1, callbacks.size());
+        if (change.equals("provider-arrived")) {
+            when(services.load(CharacterIdentity.class)).thenReturn(identity);
+            sessions.put(p.getUniqueId(), new CharacterSession(
+                    new CharacterRef(p.getUniqueId(), UUID.randomUUID()), 1));
+        } else if (change.equals("reconnect")) {
+            UUID ownerId = p.getUniqueId();
+            players.remove(p);
+            Player replacement = player();
+            when(replacement.getUniqueId()).thenReturn(ownerId);
+        }
+        runCallbacks();
+        if (change.equals("unchanged")) {
+            spawner.verify(() -> MythicSpawner.spawn(spot, "zombies", 1, Keys.KIND_AMBIENT));
+            assertEquals(1, state.getAmbientAlive());
+        } else {
+            spawner.verifyNoInteractions();
+            assertEquals(0, state.getAmbientAlive());
         }
     }
 

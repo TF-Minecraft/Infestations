@@ -20,6 +20,8 @@ import net.tfminecraft.infestations.infestation.LurePhase;
 import net.tfminecraft.infestations.loader.GroupLoader;
 import net.tfminecraft.infestations.loader.GroupLoader.GroupTune;
 import net.tfminecraft.infestations.utils.Provinces;
+import net.tfminecraft.tlibs.character.CharacterSession;
+import net.tfminecraft.tlibs.character.Characters;
 
 public final class AmbientSpawnService {
 
@@ -70,6 +72,10 @@ public final class AmbientSpawnService {
         if (want <= 0) {
             return;
         }
+        CharacterSession session = Characters.currentSession(player).orElse(null);
+        if (session == null && Characters.available()) {
+            return;
+        }
         UUID playerId = player.getUniqueId();
         String playerName = player.getName();
         int provinceId = infestation.getProvinceId();
@@ -98,8 +104,11 @@ public final class AmbientSpawnService {
                     return;
                 }
                 Player origin = Bukkit.getPlayer(playerId);
-                if (origin == null || !origin.isOnline() || Provinces.at(origin) != provinceId) {
+                if (origin != player || !origin.isOnline() || Provinces.at(origin) != provinceId) {
                     SpawnLog.line(infestation, playerName, "left-province");
+                    return;
+                }
+                if (session == null ? Characters.available() : !Characters.isCurrent(session)) {
                     return;
                 }
                 if (GroupLoader.blockedByNight(infestation.getGroupId(), origin.getWorld())) {
