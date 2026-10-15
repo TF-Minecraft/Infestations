@@ -162,7 +162,10 @@ class CommandManagerTest {
             assertEquals(List.of("42"), complete(console, command, "set", "4"));
             assertEquals(List.of("43"), complete(console, command, "clear", "4"));
             assertEquals(List.of("42", "here"), complete(player, command, "set", ""));
+            assertEquals(List.of(), complete(player, command, "clear", "H"));
+            provinces.when(() -> Provinces.at(player)).thenReturn(43);
             assertEquals(List.of("here"), complete(player, command, "clear", "H"));
+            provinces.when(() -> Provinces.at(player)).thenReturn(42);
         }
         groups.when(GroupLoader::groupIds).thenReturn(Set.of("rats", "swamp"));
         groups.when(() -> GroupLoader.allowsTerrain("rats", 42)).thenReturn(true);
@@ -173,6 +176,65 @@ class CommandManagerTest {
         }
         verify(console, never()).sendMessage(anyString());
         verify(player, never()).sendMessage(anyString());
+    }
+
+    @Test void setHereCompletionRequiresUninfestedLandAndStaysQuiet() {
+        admin();
+        when(player.hasPermission("infestations.admin")).thenReturn(true);
+        provinces.when(() -> Provinces.at(player)).thenReturn(42);
+        provinces.when(() -> Provinces.validLand(42)).thenReturn(true);
+        provinces.when(() -> Provinces.validLand(43)).thenReturn(true);
+        when(manager.get(43)).thenReturn(new Infestation(43, "rats", Severity.MILD));
+        try (var factions = mockStatic(net.tfminecraft.simplefactions.SimpleFactions.class)) {
+            assertEquals(List.of("here"), complete(player, command, "set", ""));
+            assertEquals(List.of("here"), complete(player, command, "SeT", "H"));
+            assertEquals(List.of("here"), complete(player, command, "set", "HeRe"));
+            assertEquals(List.of(), complete(player, command, "set", "hereX"));
+            assertEquals(List.of(), complete(console, command, "set", ""));
+            assertEquals(List.of(), complete(console, command, "set", "H"));
+            for (int ineligible : List.of(43, 44, 999, Provinces.UNKNOWN)) {
+                provinces.when(() -> Provinces.at(player)).thenReturn(ineligible);
+                assertEquals(List.of(), complete(player, command, "set", ""), "province " + ineligible);
+                assertEquals(List.of(), complete(player, command, "SET", "H"), "province " + ineligible);
+            }
+        }
+        verify(console, never()).sendMessage(anyString());
+        verify(player, never()).sendMessage(anyString());
+        messages.verifyNoInteractions();
+        verify(manager, never()).set(anyInt(), anyString(), any());
+        verify(manager, never()).clear(anyInt(), anyBoolean());
+    }
+
+    @Test void clearHereCompletionRequiresAnActiveInfestationOnLandAndStaysQuiet() {
+        admin();
+        when(player.hasPermission("infestations.admin")).thenReturn(true);
+        provinces.when(() -> Provinces.at(player)).thenReturn(42);
+        provinces.when(() -> Provinces.validLand(42)).thenReturn(true);
+        provinces.when(() -> Provinces.validLand(43)).thenReturn(true);
+        Infestation infestation = new Infestation(43, "rats", Severity.MILD);
+        when(manager.get(43)).thenReturn(infestation);
+        when(manager.get(44)).thenReturn(new Infestation(44, "rats", Severity.MILD));
+        when(manager.all()).thenReturn(List.of(infestation));
+        assertEquals(List.of("43"), complete(player, command, "clear", ""));
+        assertEquals(List.of(), complete(player, command, "clear", "H"));
+        provinces.when(() -> Provinces.at(player)).thenReturn(43);
+        assertEquals(List.of("43", "here"), complete(player, command, "clear", ""));
+        assertEquals(List.of("here"), complete(player, command, "ClEaR", "H"));
+        assertEquals(List.of("here"), complete(player, command, "clear", "HeRe"));
+        assertEquals(List.of(), complete(player, command, "clear", "hereX"));
+        assertEquals(List.of("43"), complete(player, command, "clear", "4"));
+        assertEquals(List.of("43"), complete(console, command, "clear", ""));
+        assertEquals(List.of(), complete(console, command, "clear", "H"));
+        for (int ineligible : List.of(44, 999, Provinces.UNKNOWN)) {
+            provinces.when(() -> Provinces.at(player)).thenReturn(ineligible);
+            assertEquals(List.of("43"), complete(player, command, "clear", ""), "province " + ineligible);
+            assertEquals(List.of(), complete(player, command, "CLEAR", "H"), "province " + ineligible);
+        }
+        verify(console, never()).sendMessage(anyString());
+        verify(player, never()).sendMessage(anyString());
+        messages.verifyNoInteractions();
+        verify(manager, never()).set(anyInt(), anyString(), any());
+        verify(manager, never()).clear(anyInt(), anyBoolean());
     }
 
     @Test void registeredCommandAllowsReloadOnlySenderAndStillDeniesAdminActions() throws Exception {
@@ -195,7 +257,10 @@ class CommandManagerTest {
         when(player.hasPermission("infestations.admin.reload")).thenReturn(true);
         assertTrue(registered.testPermissionSilent(player));
         assertTrue(registered.testPermissionSilent(console));
+        assertEquals(List.of("reload"), registered.tabComplete(console, "infestations", new String[]{""}));
         assertEquals(List.of("reload"), registered.tabComplete(console, "infestations", new String[]{"RE"}));
+        assertEquals(List.of(), registered.tabComplete(console, "infestations", new String[]{"set", "H"}));
+        assertEquals(List.of(), registered.tabComplete(console, "infestations", new String[]{"clear", "H"}));
         assertTrue(registered.execute(console, "infestation", new String[]{"reload"}));
         verify(Infestations.plugin).reloadAll();
         assertTrue(registered.execute(console, "infestation", new String[]{"set", "42", "rats", "mild"}));

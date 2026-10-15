@@ -208,7 +208,12 @@ public final class CommandManager implements CommandExecutor, TabCompleter {
                             .forEach(province -> options.add(String.valueOf(province.getId())));
                 }
             }
-            if (sender instanceof Player) options.add("here");
+            Integer province = completionProvince(sender, "here");
+            if (province != null && Provinces.validLand(province)
+                    && (args[0].equalsIgnoreCase("clear")
+                            ? manager.get(province) != null : manager.get(province) == null)) {
+                options.add("here");
+            }
             return prefix(options, args[1]);
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("set")) {
