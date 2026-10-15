@@ -180,12 +180,20 @@ class CommandManagerTest {
         when(Infestations.plugin.isEnabled()).thenReturn(true);
         var description = new org.bukkit.plugin.PluginDescriptionFile(
                 getClass().getResourceAsStream("/plugin.yml"));
+        assertEquals("infestations.admin;infestations.admin.reload",
+                description.getCommands().get("infestation").get("permission"));
         var constructor = PluginCommand.class.getDeclaredConstructor(String.class, org.bukkit.plugin.Plugin.class);
         constructor.setAccessible(true);
         PluginCommand registered = constructor.newInstance("infestation", Infestations.plugin);
         registered.setPermission((String) description.getCommands().get("infestation").get("permission"));
         registered.setExecutor(commands);
         registered.setTabCompleter(commands);
+        assertFalse(registered.testPermissionSilent(player));
+        when(player.hasPermission("infestations.admin")).thenReturn(true);
+        assertTrue(registered.testPermissionSilent(player));
+        when(player.hasPermission("infestations.admin")).thenReturn(false);
+        when(player.hasPermission("infestations.admin.reload")).thenReturn(true);
+        assertTrue(registered.testPermissionSilent(player));
         assertTrue(registered.testPermissionSilent(console));
         assertEquals(List.of("reload"), registered.tabComplete(console, "infestations", new String[]{"RE"}));
         assertTrue(registered.execute(console, "infestation", new String[]{"reload"}));
