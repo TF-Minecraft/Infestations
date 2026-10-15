@@ -19,6 +19,7 @@ import net.tfminecraft.infestations.infestation.LurePhase;
 import net.tfminecraft.infestations.infestation.Severity;
 import net.tfminecraft.infestations.loader.GroupLoader;
 import net.tfminecraft.infestations.utils.Provinces;
+import net.tfminecraft.simplefactions.SimpleFactions;
 
 public final class CommandManager implements CommandExecutor, TabCompleter {
 
@@ -195,15 +196,48 @@ public final class CommandManager implements CommandExecutor, TabCompleter {
             return List.of();
         }
         if (args.length == 2 && (args[0].equalsIgnoreCase("set") || args[0].equalsIgnoreCase("clear"))) {
-            return prefix(List.of("here"), args[1]);
+            List<String> options = new ArrayList<>();
+            var manager = Infestations.plugin.getInfestationManager();
+            if (args[0].equalsIgnoreCase("clear")) {
+                manager.all().forEach(infestation -> options.add(String.valueOf(infestation.getProvinceId())));
+            } else {
+                var sf = SimpleFactions.getInstance();
+                if (sf != null && sf.getProvinceManager() != null) {
+                    sf.getProvinceManager().getProvinces().stream()
+                            .filter(province -> Provinces.validLand(province.getId()) && manager.get(province.getId()) == null)
+                            .forEach(province -> options.add(String.valueOf(province.getId())));
+                }
+            }
+            Integer province = completionProvince(sender, "here");
+            if (province != null && Provinces.validLand(province)
+                    && (args[0].equalsIgnoreCase("clear")
+                            ? manager.get(province) != null : manager.get(province) == null)) {
+                options.add("here");
+            }
+            return prefix(options, args[1]);
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("set")) {
-            return prefix(new ArrayList<>(GroupLoader.groupIds()), args[2]);
+            Integer province = completionProvince(sender, args[1]);
+            if (province == null || !Provinces.validLand(province)
+                    || Infestations.plugin.getInfestationManager().get(province) != null) return List.of();
+            return prefix(GroupLoader.groupIds().stream()
+                    .filter(group -> GroupLoader.allowsTerrain(group, province)).toList(), args[2]);
         }
         if (args.length == 4 && args[0].equalsIgnoreCase("set")) {
             return prefix(Arrays.stream(Severity.values()).map(Severity::id).collect(Collectors.toList()), args[3]);
         }
         return List.of();
+    }
+
+    private static Integer completionProvince(CommandSender sender, String token) {
+        if ("here".equalsIgnoreCase(token)) {
+            return sender instanceof Player player ? Provinces.at(player) : null;
+        }
+        try {
+            return Integer.valueOf(token);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private static List<String> prefix(List<String> options, String typed) {
