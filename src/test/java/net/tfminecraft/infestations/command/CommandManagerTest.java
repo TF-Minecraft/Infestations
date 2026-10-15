@@ -129,9 +129,11 @@ class CommandManagerTest {
         admin(); when(console.hasPermission("infestations.admin.reload")).thenReturn(true);
         assertEquals(List.of("reload", "set", "clear", "list"), complete(console, command, ""));
         assertEquals(List.of("set"), complete(console, command, "S"));
-        assertEquals(List.of("here"), complete(console, command, "set", "H"));
-        assertEquals(List.of("here"), complete(console, command, "clear", ""));
+        assertEquals(List.of(), complete(console, command, "set", "H"));
+        assertEquals(List.of(), complete(console, command, "clear", ""));
         groups.when(GroupLoader::groupIds).thenReturn(Set.of("rats"));
+        provinces.when(() -> Provinces.validLand(4)).thenReturn(true);
+        groups.when(() -> GroupLoader.allowsTerrain("rats", 4)).thenReturn(true);
         assertEquals(List.of("rats"), complete(console, command, "set", "4", "r"));
         assertEquals(Severity.values().length, complete(console, command, "set", "4", "rats", "").size());
         assertEquals(List.of(), complete(console, command));
@@ -141,6 +143,58 @@ class CommandManagerTest {
         assertEquals(List.of("leave"), complete(console, lure, "L"));
         assertEquals(List.of(), complete(console, lure, "leave", ""));
     }
+    @Test void provinceAndGroupCandidatesRespectLiveStateAndSender() {
+        admin();
+        when(player.hasPermission("infestations.admin")).thenReturn(true);
+        var sf = mock(net.tfminecraft.simplefactions.SimpleFactions.class, RETURNS_DEEP_STUBS);
+        var land = mock(net.tfminecraft.simplefactions.map.provinces.Province.class);
+        var occupied = mock(net.tfminecraft.simplefactions.map.provinces.Province.class);
+        var water = mock(net.tfminecraft.simplefactions.map.provinces.Province.class);
+        when(land.getId()).thenReturn(42); when(occupied.getId()).thenReturn(43); when(water.getId()).thenReturn(44);
+        when(sf.getProvinceManager().getProvinces()).thenReturn(List.of(land, occupied, water));
+        provinces.when(() -> Provinces.validLand(42)).thenReturn(true);
+        provinces.when(() -> Provinces.validLand(43)).thenReturn(true);
+        provinces.when(() -> Provinces.at(player)).thenReturn(42);
+        when(manager.get(43)).thenReturn(new Infestation(43, "rats", Severity.MILD));
+        when(manager.all()).thenReturn(List.of(new Infestation(43, "rats", Severity.MILD)));
+        try (var factions = mockStatic(net.tfminecraft.simplefactions.SimpleFactions.class)) {
+            factions.when(net.tfminecraft.simplefactions.SimpleFactions::getInstance).thenReturn(sf);
+            assertEquals(List.of("42"), complete(console, command, "set", "4"));
+            assertEquals(List.of("43"), complete(console, command, "clear", "4"));
+            assertEquals(List.of("42", "here"), complete(player, command, "set", ""));
+            assertEquals(List.of("here"), complete(player, command, "clear", "H"));
+        }
+        groups.when(GroupLoader::groupIds).thenReturn(Set.of("rats", "swamp"));
+        groups.when(() -> GroupLoader.allowsTerrain("rats", 42)).thenReturn(true);
+        assertEquals(List.of("rats"), complete(player, command, "set", "HeRe", "R"));
+        assertEquals(List.of("rats"), complete(console, command, "set", "42", ""));
+        for (String invalid : List.of("here", "nonsense", "44", "43")) {
+            assertTrue(complete(console, command, "set", invalid, "").isEmpty());
+        }
+        verify(console, never()).sendMessage(anyString());
+        verify(player, never()).sendMessage(anyString());
+    }
+
+    @Test void registeredCommandAllowsReloadOnlySenderAndStillDeniesAdminActions() throws Exception {
+        when(console.hasPermission("infestations.admin.reload")).thenReturn(true);
+        when(Infestations.plugin.isEnabled()).thenReturn(true);
+        var description = new org.bukkit.plugin.PluginDescriptionFile(
+                getClass().getResourceAsStream("/plugin.yml"));
+        var constructor = PluginCommand.class.getDeclaredConstructor(String.class, org.bukkit.plugin.Plugin.class);
+        constructor.setAccessible(true);
+        PluginCommand registered = constructor.newInstance("infestation", Infestations.plugin);
+        registered.setPermission((String) description.getCommands().get("infestation").get("permission"));
+        registered.setExecutor(commands);
+        registered.setTabCompleter(commands);
+        assertTrue(registered.testPermissionSilent(console));
+        assertEquals(List.of("reload"), registered.tabComplete(console, "infestations", new String[]{"RE"}));
+        assertTrue(registered.execute(console, "infestation", new String[]{"reload"}));
+        verify(Infestations.plugin).reloadAll();
+        assertTrue(registered.execute(console, "infestation", new String[]{"set", "42", "rats", "mild"}));
+        verify(console).sendMessage("no-permission");
+        verify(manager, never()).set(anyInt(), anyString(), any());
+    }
+
     private List<String> complete(CommandSender sender, Command cmd, String... args) {
         return commands.onTabComplete(sender, cmd, cmd.getName(), args);
     }
