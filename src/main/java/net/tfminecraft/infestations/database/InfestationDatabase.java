@@ -7,8 +7,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import com.google.gson.Gson;
@@ -137,6 +139,19 @@ public final class InfestationDatabase {
                 }
             }
         }
+        if (row.owedDeaths != null) {
+            for (Map.Entry<String, List<String>> e : row.owedDeaths.entrySet()) {
+                if (e.getKey() == null || e.getValue() == null) continue;
+                try {
+                    UUID id = UUID.fromString(e.getKey());
+                    for (String character : e.getValue()) {
+                        if (character == null) continue;
+                        infestation.getOwedDeaths().computeIfAbsent(id, k -> new HashSet<>()).add(character);
+                    }
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+        }
         return infestation;
     }
 
@@ -168,6 +183,9 @@ public final class InfestationDatabase {
         }
         for (Map.Entry<UUID, String> e : infestation.getLogoutCharacter().entrySet()) {
             row.logoutCharacter.put(e.getKey().toString(), e.getValue());
+        }
+        for (Map.Entry<UUID, Set<String>> e : infestation.getOwedDeaths().entrySet()) {
+            row.owedDeaths.put(e.getKey().toString(), new ArrayList<>(e.getValue()));
         }
         return row;
     }

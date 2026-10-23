@@ -18,7 +18,8 @@ commits to the fight, and defeats every monster the lure draws in.
 - **Committed parties** — a committed player who leaves the province takes
   damage until they opt out of the fight. Losing the whole party
   fails the lure, bystanders who stay are warned and damaged, and logged-out
-  players get a grace period.
+  players get a grace period. A player still away when it ends no longer holds
+  the lure, and that character dies when it next logs in.
 - **Optional spread** — idle infestations can worsen and spread to neighbouring
   land, including across a single water or sea province.
 - **Map and persistence** — infestation severity is exported to the

@@ -608,13 +608,12 @@ class InfestationManagerTest {
         assertEquals(Set.of(expired), active.getDeathOnLogin());
         assertEquals(Map.of(grace, 30L), active.getLogoutGraceUntil());
         call("checkWipe", active); assertEquals(LurePhase.ACTIVE, active.getPhase());
-        active.getLogoutGraceUntil().clear(); call("checkWipe", active);
-        assertEquals(LurePhase.ACTIVE, active.getPhase());
-        active.getDeathOnLogin().clear();
         Player dead = player(1), offline = player(1), witness = player(1), elsewhere = player(2);
         when(dead.isDead()).thenReturn(true); when(offline.isOnline()).thenReturn(false);
-        active.getCommitted().addAll(List.of(dead.getUniqueId(), offline.getUniqueId(), UUID.randomUUID()));
-        call("checkWipe", active); assertEquals(LurePhase.NONE, active.getPhase());
+        active.getCommitted().addAll(List.of(expired, dead.getUniqueId(), offline.getUniqueId(), UUID.randomUUID()));
+        // An expired grace no longer holds the lure: only presence or a running grace does.
+        active.getLogoutGraceUntil().clear(); call("checkWipe", active);
+        assertEquals(LurePhase.NONE, active.getPhase());
         verify(witness).sendMessage("lure-fail"); verify(elsewhere, never()).sendMessage("lure-fail");
         call("checkWipe", active); call("failLure", active);
         verify(ambient).reconcileLoaded(manager);
@@ -946,7 +945,7 @@ class InfestationManagerTest {
         call("tickOutsideCommitted", legacy); verify(p, never()).damage(anyDouble());
     }
 
-    @Test void unidentifiedDebtsDoNotKeepTheLureAliveAcrossSaveAndLoad(@TempDir java.nio.file.Path dir) {
+    @Test void debtsDoNotKeepTheLureAliveAndOnlyTaggedOnesOutliveItAcrossSaveAndLoad(@TempDir java.nio.file.Path dir) {
         Infestation legacy = lure(1, LurePhase.ACTIVE);
         Player p = player(1); UUID id = p.getUniqueId(), offline = UUID.randomUUID(), tagged = UUID.randomUUID();
         legacy.getCommitted().addAll(List.of(id, offline, tagged)); legacy.getDeathOnLogin().addAll(List.of(id, offline, tagged));
@@ -958,14 +957,13 @@ class InfestationManagerTest {
         manager.save(); manager.start();
         Infestation loaded = manager.get(1);
         assertNotSame(legacy, loaded); assertEquals(Set.of(id, offline, tagged), loaded.getDeathOnLogin());
-        call("checkWipe", loaded); assertEquals(LurePhase.ACTIVE, loaded.getPhase());
-        loaded.getDeathOnLogin().remove(tagged); loaded.getCommitted().remove(tagged); loaded.getLogoutCharacter().clear();
-        manager.save(); manager.start(); loaded = manager.get(1);
-        assertEquals(Set.of(id, offline), loaded.getDeathOnLogin()); assertEquals(LurePhase.ACTIVE, loaded.getPhase());
         call("checkWipe", loaded);
         assertEquals(LurePhase.NONE, loaded.getPhase());
         assertTrue(loaded.getCommitted().isEmpty()); assertTrue(loaded.getDeathOnLogin().isEmpty());
+        assertEquals(Map.of(tagged, Set.of(CAROL)), loaded.getOwedDeaths());
         verify(p).sendMessage("lure-fail"); verify(plugin.getLogger(), atLeastOnce()).warning(contains(id.toString()));
+        manager.save(); manager.start();
+        assertEquals(Map.of(tagged, Set.of(CAROL)), manager.get(1).getOwedDeaths());
     }
 
     @Test void unidentifiedDeathsAreHeldWithAWarningWhileRPCharactersRuns() {
@@ -1137,6 +1135,10 @@ class InfestationManagerTest {
         call("checkWipe", lure);
         assertFalse(lure.isCommitted(id));
         assertEquals(LurePhase.NONE, lure.getPhase());
+        assertTrue(lure.getOwedDeaths().isEmpty());
+        online.put(id, p); when(p.isOnline()).thenReturn(true);
+        start(p, ALICE);
+        verify(p, never()).damage(anyDouble());
     }
 
     @Test void loadedCharacterTagsEnableStickyTrackingWithoutAProvider() {
@@ -1372,5 +1374,131 @@ class InfestationManagerTest {
         verify(event).setCancelled(true);
         furniture.verify(() -> LureFurniture.remove(f));
         assertSame(active, manager.get(1));
+    }
+
+    private void logOff(Player player) {
+        end(player, CharacterSessionEndEvent.Reason.QUIT);
+        online.remove(player.getUniqueId()); players.remove(player);
+        when(player.isOnline()).thenReturn(false);
+    }
+    private void logOn(Player player, String character) {
+        online.put(player.getUniqueId(), player); players.add(player);
+        when(player.isOnline()).thenReturn(true);
+        start(player, character);
+    }
+
+    @Test void soleCommittedPlayerPastGraceFailsTheLureButStillDiesOnReturningAsThatCharacter() throws Exception {
+        characters.when(Characters::enabled).thenReturn(true);
+        Infestation lure = lure(1, LurePhase.ACTIVE);
+        Player p = player(1), visitor = player(1); UUID id = p.getUniqueId();
+        current(visitor, CAROL);
+        start(p, ALICE); call("tryJoin", p, lure);
+        logOff(p);
+        long deadline = lure.getLogoutGraceUntil().get(id);
+        atTick(19); tick.run();
+        assertEquals(LurePhase.ACTIVE, lure.getPhase(), "A running grace holds the lure");
+        verify(visitor).damage(2.0);
+
+        lure.getLogoutGraceUntil().put(id, System.currentTimeMillis() - 1);
+        assertTrue(deadline > System.currentTimeMillis());
+        atTick(40); tick.run();
+        assertEquals(LurePhase.NONE, lure.getPhase());
+        assertFalse(lure.hasLure()); assertSame(lure, manager.get(1));
+        assertTrue(lure.getCommitted().isEmpty()); assertTrue(lure.getDeathOnLogin().isEmpty());
+        assertEquals(Map.of(id, Set.of(ALICE)), lure.getOwedDeaths());
+        furniture.verify(() -> LureFurniture.removeFor(lure));
+        hologram.verify(() -> LureHologram.remove(lure));
+        verify(ambient).reconcileLoaded(manager);
+        verify(visitor).sendMessage("lure-fail");
+        atTick(59); tick.run();
+        verify(visitor, times(1)).damage(anyDouble());
+
+        logOn(p, BOB);
+        verify(p, never()).damage(anyDouble());
+        assertEquals(Map.of(id, Set.of(ALICE)), lure.getOwedDeaths());
+        logOff(p);
+        logOn(p, ALICE);
+        verify(p).damage(40.0);
+        assertTrue(lure.getOwedDeaths().isEmpty());
+        logOff(p); logOn(p, ALICE);
+        verify(p, times(1)).damage(anyDouble());
+    }
+
+    @Test void oneCommittedPlayerPastGraceLeavesTheFightWhileAnotherKeepsItAlive() throws Exception {
+        characters.when(Characters::enabled).thenReturn(true);
+        Infestation lure = lure(1, LurePhase.ACTIVE);
+        Player gone = player(1), fighter = player(1); UUID id = gone.getUniqueId();
+        start(gone, ALICE); call("tryJoin", gone, lure);
+        start(fighter, BOB); call("tryJoin", fighter, lure);
+        logOff(gone);
+        lure.getLogoutGraceUntil().put(id, System.currentTimeMillis() - 1);
+        atTick(19); tick.run();
+        assertEquals(LurePhase.ACTIVE, lure.getPhase());
+        assertEquals(Set.of(id), lure.getDeathOnLogin());
+        assertTrue(lure.getOwedDeaths().isEmpty());
+
+        // Back on another character, the departed player is still not in the fight.
+        logOn(gone, CAROL);
+        verify(gone, never()).damage(anyDouble());
+        when(fighter.isDead()).thenReturn(true);
+        call("checkWipe", lure);
+        assertEquals(LurePhase.NONE, lure.getPhase());
+        verify(fighter).sendMessage("lure-fail"); verify(gone).sendMessage("lure-fail");
+        assertEquals(Map.of(id, Set.of(ALICE)), lure.getOwedDeaths(), "They abandoned a running fight");
+
+        characters.when(() -> Characters.isDead(gone, ALICE)).thenReturn(true);
+        manager.characterReturned(gone);
+        verify(gone, never()).damage(anyDouble());
+        assertTrue(lure.getOwedDeaths().isEmpty(), "A character that already died owes nothing more");
+    }
+
+    @Test void returningWithinGraceKeepsTheLureWithoutPenalty() throws Exception {
+        characters.when(Characters::enabled).thenReturn(true);
+        Infestation lure = lure(1, LurePhase.ACTIVE);
+        Player p = player(1); UUID id = p.getUniqueId();
+        start(p, ALICE); call("tryJoin", p, lure);
+        logOff(p);
+        atTick(19); tick.run();
+        assertEquals(LurePhase.ACTIVE, lure.getPhase());
+        logOn(p, ALICE);
+        assertTrue(lure.getLogoutGraceUntil().isEmpty());
+        atTick(39); tick.run();
+        assertEquals(LurePhase.ACTIVE, lure.getPhase());
+        assertTrue(lure.isCommitted(id));
+        assertTrue(lure.getDeathOnLogin().isEmpty()); assertTrue(lure.getOwedDeaths().isEmpty());
+        verify(p, never()).damage(anyDouble());
+    }
+
+    @Test void owedDeathsSettleByAccountWithoutCharactersAndByTheSavedDeathWithThem() throws Exception {
+        Infestation lure = lure(1, LurePhase.ACTIVE);
+        Player p = player(1); UUID id = p.getUniqueId();
+        call("tryJoin", p, lure);
+        PlayerQuitEvent quit = mock(PlayerQuitEvent.class); when(quit.getPlayer()).thenReturn(p);
+        manager.onQuit(quit); online.remove(id); when(p.isOnline()).thenReturn(false);
+        lure.getLogoutGraceUntil().put(id, 1L);
+        atTick(19); tick.run();
+        assertEquals(LurePhase.NONE, lure.getPhase());
+        assertEquals(Map.of(id, Set.of(Infestation.ACCOUNT)), lure.getOwedDeaths());
+        online.put(id, p); when(p.isOnline()).thenReturn(true);
+        PlayerJoinEvent join = mock(PlayerJoinEvent.class); when(join.getPlayer()).thenReturn(p);
+        when(p.isDead()).thenReturn(true);
+        manager.onJoin(join); runLater();
+        verify(p, never()).damage(anyDouble());
+        assertTrue(lure.getOwedDeaths().isEmpty(), "Already dead on return settles the debt");
+        lure.getOwedDeaths().put(id, new HashSet<>(Set.of(Infestation.ACCOUNT)));
+        call("onPlayerDeath", p);
+        assertTrue(lure.getOwedDeaths().isEmpty());
+
+        lure.getOwedDeaths().put(id, new HashSet<>(Set.of(ALICE, BOB)));
+        database.when(InfestationDatabase::load).thenReturn(List.of(lure));
+        manager = new InfestationManager(plugin); manager.start();
+        manager.characterReturned(p);
+        assertEquals(Set.of(ALICE, BOB), lure.getOwedDeaths().get(id), "Owed character deaths keep tracking on");
+        characters.when(Characters::enabled).thenReturn(true);
+        characters.when(() -> Characters.isDead(any(CharacterRef.class))).thenReturn(true);
+        manager.onCharacterDeath(died(id, ALICE.toUpperCase(Locale.ROOT)));
+        assertEquals(Map.of(id, Set.of(BOB)), lure.getOwedDeaths());
+        manager.onCharacterDeath(died(id, BOB));
+        assertTrue(lure.getOwedDeaths().isEmpty());
     }
 }

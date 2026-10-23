@@ -13,6 +13,9 @@ import org.bukkit.block.Block;
 
 public final class Infestation {
 
+    /** The owed-death entry of an account on a server without characters. */
+    public static final String ACCOUNT = "";
+
     private final int provinceId;
     private String groupId;
     private Severity severity;
@@ -41,6 +44,11 @@ public final class Infestation {
     private final Set<UUID> deathOnLogin = new HashSet<>();
     /** The character each committed player logged off as, so a death on login reaches only that character. */
     private final Map<UUID, String> logoutCharacter = new HashMap<>();
+    /**
+     * Deaths still owed after their lure ended, by account: the characters that abandoned a running fight,
+     * or {@link #ACCOUNT} on servers without characters. They outlive lures until settled; clearing the infestation forgives them.
+     */
+    private final Map<UUID, Set<String>> owedDeaths = new HashMap<>();
 
     public Infestation(int provinceId, String groupId, Severity severity) {
         this.provinceId = provinceId;
@@ -298,6 +306,10 @@ public final class Infestation {
 
     public Map<UUID, String> getLogoutCharacter() {
         return logoutCharacter;
+    }
+
+    public Map<UUID, Set<String>> getOwedDeaths() {
+        return owedDeaths;
     }
 
     public boolean isCommitted(UUID id) {
