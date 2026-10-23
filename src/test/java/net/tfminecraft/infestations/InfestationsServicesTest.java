@@ -231,9 +231,10 @@ class InfestationsServicesTest {
             Bukkit.getPluginManager().callEvent(new CharacterSessionStartEvent(player, returned));
             assertTrue(grace.getLogoutGraceUntil().isEmpty());
             assertTrue(grace.getLogoutCharacter().isEmpty());
-            assertTrue(debt.getDeathOnLogin().isEmpty());
-            assertTrue(debt.getLogoutCharacter().isEmpty());
             verify(player).damage(40.0);
+            // The kill did not land here, so the debt waits for a settled death.
+            assertEquals(Set.of(owner), debt.getDeathOnLogin());
+            assertEquals(Map.of(owner, alice.toString()), debt.getLogoutCharacter());
         }
     }
     @Test void unregisteringTheProviderHoldsTaggedPenaltiesInsteadOfUsingTheAccount() {

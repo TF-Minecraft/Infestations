@@ -675,6 +675,8 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             }
             found = true;
             boolean inProvince = Provinces.at(player) == infestation.getProvinceId();
+            // Leaving cannot forgive a death owed for abandoning the fight before.
+            keepOwedDeath(infestation, id);
             infestation.getCommitted().remove(id);
             infestation.getLogoutGraceUntil().remove(id);
             infestation.getDeathOnLogin().remove(id);
@@ -814,12 +816,17 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
      */
     private void keepOwedDeaths(Infestation infestation) {
         for (UUID id : infestation.getDeathOnLogin()) {
-            if (!infestation.isCommitted(id) || isUnidentified(infestation, id)) {
-                continue;
-            }
-            String character = infestation.getLogoutCharacter().getOrDefault(id, Infestation.ACCOUNT);
-            infestation.getOwedDeaths().computeIfAbsent(id, k -> new HashSet<>()).add(character);
+            keepOwedDeath(infestation, id);
         }
+    }
+
+    private void keepOwedDeath(Infestation infestation, UUID id) {
+        if (!infestation.getDeathOnLogin().contains(id) || !infestation.isCommitted(id)
+                || isUnidentified(infestation, id)) {
+            return;
+        }
+        String character = infestation.getLogoutCharacter().getOrDefault(id, Infestation.ACCOUNT);
+        infestation.getOwedDeaths().computeIfAbsent(id, k -> new HashSet<>()).add(character);
     }
 
     private void victory(Infestation infestation) {
@@ -1296,6 +1303,8 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
 
     /**
      * Ends the logout grace of the character now active and kills it if its grace ran out.
+     * The kill clears nothing: only a settled death does, so a kill that does not land is owed again
+     * on the next return. One return kills at most once.
      * Another character's grace or death waits, and the death is dropped once that character has died.
      * Standalone servers use the account. Once identity is known, provider loss holds its debts.
      */
@@ -1330,16 +1339,17 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             if (otherCharacter && !Characters.isDead(player, target)) {
                 continue;
             }
-            infestation.getDeathOnLogin().remove(id);
-            infestation.getLogoutCharacter().remove(id);
-            changed = true;
-            if (otherCharacter) {
-                // That character already died, which settles what the lure owed.
+            if (otherCharacter || !infestation.isCommitted(id)) {
+                infestation.getDeathOnLogin().remove(id);
+                infestation.getLogoutCharacter().remove(id);
+                changed = true;
+                // That character already died, or nothing is committed, so nothing is left to pay.
                 infestation.getCommitted().remove(id);
                 if (infestation.getPhase() != LurePhase.NONE) {
                     checkWipe(infestation);
                 }
-            } else if (infestation.isCommitted(id) && !player.isDead()) {
+            } else if (!killed && !player.isDead()) {
+                // The debt stays until the death is settled, so a kill that does not land is owed again next time.
                 kill(player);
                 killed = true;
             }
@@ -1350,7 +1360,6 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                 break;
             }
             changed |= dropDeadCharacterDebt(infestation, player, active);
-            // The debt stays until the death is settled, so a kill that does not land is owed again next time.
             Set<String> owed = infestation.getOwedDeaths().get(id);
             if (!killed && owed != null && owed.stream().anyMatch(owing::equalsIgnoreCase) && !player.isDead()) {
                 kill(player);

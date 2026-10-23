@@ -871,7 +871,7 @@ class InfestationManagerTest {
         current(p, ALICE);
         manager.characterReturned(p);
         verify(p).damage(40.0);
-        assertTrue(state.getDeathOnLogin().isEmpty()); assertTrue(state.getLogoutCharacter().isEmpty());
+        assertEquals(Set.of(id), state.getDeathOnLogin()); assertEquals(ALICE, state.getLogoutCharacter().get(id));
 
         state.getDeathOnLogin().add(id); state.getLogoutCharacter().put(id, ALICE);
         current(p, BOB);
@@ -1037,7 +1037,7 @@ class InfestationManagerTest {
         }).when(p).damage(anyDouble());
         manager.characterReturned(p);
         verify(p, times(1)).damage(40.0);
-        assertEquals(1, first.getDeathOnLogin().size() + second.getDeathOnLogin().size());
+        assertEquals(2, first.getDeathOnLogin().size() + second.getDeathOnLogin().size());
     }
 
     @Test void pendingCharactersCannotPlaceLuresOrReceiveNonjoinerDamage() throws Exception {
@@ -1168,8 +1168,8 @@ class InfestationManagerTest {
         doAnswer(i -> { current(p, BOB); current(p, ALICE); return null; }).when(p).damage(anyDouble());
         manager.characterReturned(p);
         verify(p, times(1)).damage(40.0);
-        assertEquals(1, first.getDeathOnLogin().size() + second.getDeathOnLogin().size());
-        assertEquals(1, first.getLogoutCharacter().size() + second.getLogoutCharacter().size());
+        assertEquals(2, first.getDeathOnLogin().size() + second.getDeathOnLogin().size());
+        assertEquals(2, first.getLogoutCharacter().size() + second.getLogoutCharacter().size());
     }
 
     @Test void standaloneJoinCallbackCannotFollowReconnectOrProviderArrival() {
@@ -1539,5 +1539,50 @@ class InfestationManagerTest {
         assertEquals(Map.of(id, Set.of(BOB)), lure.getOwedDeaths());
         manager.onCharacterDeath(died(id, BOB));
         assertTrue(lure.getOwedDeaths().isEmpty());
+    }
+
+    @Test void aRunningLureKillThatDoesNotLandIsOwedAgainUntilADeathSettlesIt() {
+        characters.when(Characters::enabled).thenReturn(true);
+        Player p = player(1), fighter = player(1); UUID id = p.getUniqueId();
+        start(fighter, BOB);
+        Infestation first = lure(1, LurePhase.ACTIVE), second = lure(2, LurePhase.ACTIVE);
+        for (Infestation lure : List.of(first, second)) {
+            lure.getCommitted().addAll(List.of(id, fighter.getUniqueId()));
+            lure.getLogoutCharacter().put(id, ALICE); lure.getDeathOnLogin().add(id);
+        }
+
+        // Cancelled or reduced damage, a totem or invulnerability: the character survives the kill.
+        start(p, ALICE);
+        verify(p, times(1)).damage(40.0);
+        for (Infestation lure : List.of(first, second)) {
+            assertEquals(Set.of(id), lure.getDeathOnLogin()); assertEquals(Map.of(id, ALICE), lure.getLogoutCharacter());
+            assertTrue(lure.isCommitted(id)); assertEquals(LurePhase.ACTIVE, lure.getPhase());
+        }
+        logOff(p); logOn(p, ALICE);
+        verify(p, times(2)).damage(40.0);
+
+        doAnswer(i -> { manager.onDeath(deathOf(p)); return null; }).when(p).damage(anyDouble());
+        logOff(p); logOn(p, ALICE);
+        verify(p, times(3)).damage(40.0);
+        for (Infestation lure : List.of(first, second)) {
+            assertTrue(lure.getDeathOnLogin().isEmpty()); assertTrue(lure.getLogoutCharacter().isEmpty());
+            assertFalse(lure.isCommitted(id)); assertEquals(LurePhase.ACTIVE, lure.getPhase());
+        }
+        logOff(p); logOn(p, ALICE);
+        verify(p, times(3)).damage(anyDouble());
+    }
+
+    @Test void leavingTheLureAfterSurvivingTheKillStillOwesTheDeath() {
+        characters.when(Characters::enabled).thenReturn(true);
+        Player p = player(1); UUID id = p.getUniqueId();
+        Infestation lure = lure(1, LurePhase.ACTIVE);
+        lure.getCommitted().add(id); lure.getLogoutCharacter().put(id, ALICE); lure.getDeathOnLogin().add(id);
+        start(p, ALICE);
+        verify(p).damage(40.0);
+        assertTrue(manager.leaveLure(p));
+        assertEquals(LurePhase.NONE, lure.getPhase());
+        assertEquals(Map.of(id, Set.of(ALICE)), lure.getOwedDeaths());
+        logOff(p); logOn(p, ALICE);
+        verify(p, times(2)).damage(40.0);
     }
 }
