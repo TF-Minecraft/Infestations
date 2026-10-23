@@ -675,6 +675,8 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             }
             found = true;
             boolean inProvince = Provinces.at(player) == infestation.getProvinceId();
+            // Leaving cannot forgive a death owed for abandoning the fight before.
+            keepOwedDeath(infestation, id);
             infestation.getCommitted().remove(id);
             infestation.getLogoutGraceUntil().remove(id);
             infestation.getDeathOnLogin().remove(id);
@@ -710,7 +712,9 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
     private boolean usesCharacters() {
         if (!characterTracking) {
             characterTracking = Characters.enabled() || byProvince.values().stream()
-                    .anyMatch(infestation -> !infestation.getLogoutCharacter().isEmpty());
+                    .anyMatch(infestation -> !infestation.getLogoutCharacter().isEmpty()
+                            || infestation.getOwedDeaths().values().stream()
+                                    .anyMatch(owed -> owed.stream().anyMatch(c -> !Infestation.ACCOUNT.equals(c))));
         }
         return characterTracking;
     }
@@ -763,18 +767,16 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         failLure(infestation);
     }
 
-    /** Held debts and their commitments are left out, since no character can return to settle them. */
+    /**
+     * A lure holds while a committed player is present or still inside their logout grace. Once that grace
+     * runs out the player has left the fight: the death they owe waits for their return, not the lure.
+     */
     private boolean hasLivingOrGrace(Infestation infestation) {
         if (!infestation.getLogoutGraceUntil().isEmpty()) {
             return true;
         }
-        for (UUID id : infestation.getDeathOnLogin()) {
-            if (!isUnidentified(infestation, id)) {
-                return true;
-            }
-        }
         for (UUID id : infestation.getCommitted()) {
-            if (isHeldDebt(infestation, id)) {
+            if (infestation.getDeathOnLogin().contains(id)) {
                 continue;
             }
             Player player = Bukkit.getPlayer(id);
@@ -793,6 +795,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         Set<UUID> committed = new HashSet<>(infestation.getCommitted());
         int provinceId = infestation.getProvinceId();
         Location loc = infestation.lureLocation();
+        keepOwedDeaths(infestation);
         destroyLure(infestation, false);
         infestation.clearLure();
         ambient.reconcileLoaded(this);
@@ -805,6 +808,25 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                 player.sendMessage(Messages.get("lure-fail"));
             }
         }
+    }
+
+    /**
+     * A failed lure still owes the deaths of those who abandoned it while it ran, so they move to the
+     * infestation and outlive the lure. Held debts have no character to reach and end with it.
+     */
+    private void keepOwedDeaths(Infestation infestation) {
+        for (UUID id : infestation.getDeathOnLogin()) {
+            keepOwedDeath(infestation, id);
+        }
+    }
+
+    private void keepOwedDeath(Infestation infestation, UUID id) {
+        if (!infestation.getDeathOnLogin().contains(id) || !infestation.isCommitted(id)
+                || isUnidentified(infestation, id)) {
+            return;
+        }
+        String character = infestation.getLogoutCharacter().getOrDefault(id, Infestation.ACCOUNT);
+        infestation.getOwedDeaths().computeIfAbsent(id, k -> new HashSet<>()).add(character);
     }
 
     private void victory(Infestation infestation) {
@@ -1183,6 +1205,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         Player online = Bukkit.getPlayer(id);
         String current = online == null ? null : Characters.activeId(online);
         for (Infestation infestation : List.copyOf(byProvince.values())) {
+            dropOwedDeath(infestation, id, character == null ? Infestation.ACCOUNT : character);
             // Without a recorded departure, the commitment belongs to the current character, if any.
             String owner = infestation.getLogoutCharacter().getOrDefault(id, current);
             if (!infestation.isCommitted(id) || (owner != null && !owner.equalsIgnoreCase(character))) {
@@ -1197,6 +1220,17 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             }
         }
         save();
+    }
+
+    private static boolean dropOwedDeath(Infestation infestation, UUID id, String character) {
+        Set<String> owed = infestation.getOwedDeaths().get(id);
+        if (owed == null || !owed.removeIf(character::equalsIgnoreCase)) {
+            return false;
+        }
+        if (owed.isEmpty()) {
+            infestation.getOwedDeaths().remove(id);
+        }
+        return true;
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -1269,6 +1303,8 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
 
     /**
      * Ends the logout grace of the character now active and kills it if its grace ran out.
+     * The kill clears nothing: only a settled death does, so a kill that does not land is owed again
+     * on the next return. One return kills at most once.
      * Another character's grace or death waits, and the death is dropped once that character has died.
      * Standalone servers use the account. Once identity is known, provider loss holds its debts.
      */
@@ -1281,9 +1317,9 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         }
         String active = session == null ? null : session.ref().characterId().toString();
         boolean changed = false;
+        boolean killed = false;
         for (Infestation infestation : List.copyOf(byProvince.values())) {
-            if (!player.isOnline() || Bukkit.getPlayer(id) != player
-                    || (session != null ? !Characters.isCurrent(session) : usesCharacters())) {
+            if (!stillReturning(player, session)) {
                 break;
             }
             String target = infestation.getLogoutCharacter().get(id);
@@ -1303,22 +1339,61 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             if (otherCharacter && !Characters.isDead(player, target)) {
                 continue;
             }
-            infestation.getDeathOnLogin().remove(id);
-            infestation.getLogoutCharacter().remove(id);
-            changed = true;
-            if (otherCharacter) {
-                // That character already died, which settles what the lure owed.
+            if (otherCharacter || !infestation.isCommitted(id)) {
+                infestation.getDeathOnLogin().remove(id);
+                infestation.getLogoutCharacter().remove(id);
+                changed = true;
+                // That character already died, or nothing is committed, so nothing is left to pay.
                 infestation.getCommitted().remove(id);
                 if (infestation.getPhase() != LurePhase.NONE) {
                     checkWipe(infestation);
                 }
-            } else if (infestation.isCommitted(id) && !player.isDead()) {
-                player.damage(Math.max(40.0, player.getHealth() + 10.0));
+            } else if (!killed && !player.isDead()) {
+                // The debt stays until the death is settled, so a kill that does not land is owed again next time.
+                kill(player);
+                killed = true;
+            }
+        }
+        String owing = active == null ? Infestation.ACCOUNT : active;
+        for (Infestation infestation : List.copyOf(byProvince.values())) {
+            if (!stillReturning(player, session)) {
+                break;
+            }
+            changed |= dropDeadCharacterDebt(infestation, player, active);
+            Set<String> owed = infestation.getOwedDeaths().get(id);
+            if (!killed && owed != null && owed.stream().anyMatch(owing::equalsIgnoreCase) && !player.isDead()) {
+                kill(player);
+                killed = true;
             }
         }
         if (changed) {
             save();
         }
+    }
+
+    private boolean stillReturning(Player player, CharacterSession session) {
+        return player.isOnline() && Bukkit.getPlayer(player.getUniqueId()) == player
+                && (session != null ? Characters.isCurrent(session) : !usesCharacters());
+    }
+
+    /** Drops a death owed by another character of this account once that character has died. */
+    private static boolean dropDeadCharacterDebt(Infestation infestation, Player player, String active) {
+        UUID id = player.getUniqueId();
+        Set<String> owed = infestation.getOwedDeaths().get(id);
+        if (owed == null || active == null) {
+            return false;
+        }
+        for (String character : List.copyOf(owed)) {
+            if (!character.equalsIgnoreCase(active) && Characters.isDead(player, character)) {
+                dropOwedDeath(infestation, id, character);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void kill(Player player) {
+        player.damage(Math.max(40.0, player.getHealth() + 10.0));
     }
 
     @EventHandler

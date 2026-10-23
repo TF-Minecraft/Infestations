@@ -26,4 +26,5 @@ public class InfestationData {
     public Map<String, Long> logoutGraceUntil = new HashMap<>();
     public List<String> deathOnLogin = new ArrayList<>();
     public Map<String, String> logoutCharacter = new HashMap<>();
+    public Map<String, List<String>> owedDeaths = new HashMap<>();
 }
