@@ -1308,6 +1308,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         }
         String active = session == null ? null : session.ref().characterId().toString();
         boolean changed = false;
+        boolean killed = false;
         for (Infestation infestation : List.copyOf(byProvince.values())) {
             if (!stillReturning(player, session)) {
                 break;
@@ -1340,13 +1341,21 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                 }
             } else if (infestation.isCommitted(id) && !player.isDead()) {
                 kill(player);
+                killed = true;
             }
         }
+        String owing = active == null ? Infestation.ACCOUNT : active;
         for (Infestation infestation : List.copyOf(byProvince.values())) {
             if (!stillReturning(player, session)) {
                 break;
             }
-            changed |= settleOwedDeath(infestation, player, active);
+            changed |= dropDeadCharacterDebt(infestation, player, active);
+            // The debt stays until the death is settled, so a kill that does not land is owed again next time.
+            Set<String> owed = infestation.getOwedDeaths().get(id);
+            if (!killed && owed != null && owed.stream().anyMatch(owing::equalsIgnoreCase) && !player.isDead()) {
+                kill(player);
+                killed = true;
+            }
         }
         if (changed) {
             save();
@@ -1358,24 +1367,15 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                 && (session != null ? Characters.isCurrent(session) : !usesCharacters());
     }
 
-    /**
-     * Kills the returning character for a death its failed lure still owes, or drops the debt once that
-     * character has died. Another living character's debt waits.
-     */
-    private static boolean settleOwedDeath(Infestation infestation, Player player, String active) {
+    /** Drops a death owed by another character of this account once that character has died. */
+    private static boolean dropDeadCharacterDebt(Infestation infestation, Player player, String active) {
         UUID id = player.getUniqueId();
-        if (dropOwedDeath(infestation, id, active == null ? Infestation.ACCOUNT : active)) {
-            if (!player.isDead()) {
-                kill(player);
-            }
-            return true;
-        }
         Set<String> owed = infestation.getOwedDeaths().get(id);
         if (owed == null || active == null) {
             return false;
         }
         for (String character : List.copyOf(owed)) {
-            if (Characters.isDead(player, character)) {
+            if (!character.equalsIgnoreCase(active) && Characters.isDead(player, character)) {
                 dropOwedDeath(infestation, id, character);
                 return true;
             }

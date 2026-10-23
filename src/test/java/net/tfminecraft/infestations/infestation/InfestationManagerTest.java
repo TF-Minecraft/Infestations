@@ -1419,9 +1419,47 @@ class InfestationManagerTest {
         logOff(p);
         logOn(p, ALICE);
         verify(p).damage(40.0);
+        assertEquals(Map.of(id, Set.of(ALICE)), lure.getOwedDeaths(), "Only a settled death pays the debt");
+        manager.onDeath(deathOf(p));
         assertTrue(lure.getOwedDeaths().isEmpty());
         logOff(p); logOn(p, ALICE);
         verify(p, times(1)).damage(anyDouble());
+    }
+
+    private EntityDeathEvent deathOf(Player player) {
+        EntityDeathEvent death = mock(EntityDeathEvent.class);
+        when(death.getEntity()).thenReturn(player);
+        return death;
+    }
+
+    @Test void aKillThatDoesNotLandKeepsTheOwedDeathAcrossSaveAndLoadUntilADeathSettlesIt(
+            @TempDir java.nio.file.Path dir) {
+        characters.when(Characters::enabled).thenReturn(true);
+        Player p = player(1); UUID id = p.getUniqueId();
+        Infestation first = infestation(1), second = infestation(2);
+        first.getOwedDeaths().put(id, new HashSet<>(Set.of(ALICE)));
+        second.getOwedDeaths().put(id, new HashSet<>(Set.of(ALICE)));
+        mocks.remove(database); database.close();
+        when(plugin.getDataFolder()).thenReturn(dir.toFile());
+
+        // Cancelled or reduced damage, a totem or invulnerability: the character survives the kill.
+        start(p, ALICE);
+        verify(p, times(1)).damage(40.0);
+        assertEquals(Map.of(id, Set.of(ALICE)), first.getOwedDeaths());
+        assertEquals(Map.of(id, Set.of(ALICE)), second.getOwedDeaths());
+
+        manager.save(); manager.start();
+        Infestation loaded = manager.get(1);
+        assertNotSame(first, loaded);
+        assertEquals(Map.of(id, Set.of(ALICE)), loaded.getOwedDeaths());
+        assertEquals(Map.of(id, Set.of(ALICE)), manager.get(2).getOwedDeaths());
+
+        doAnswer(i -> { manager.onDeath(deathOf(p)); return null; }).when(p).damage(anyDouble());
+        logOff(p); logOn(p, ALICE);
+        verify(p, times(2)).damage(40.0);
+        assertTrue(loaded.getOwedDeaths().isEmpty()); assertTrue(manager.get(2).getOwedDeaths().isEmpty());
+        logOff(p); logOn(p, ALICE);
+        verify(p, times(2)).damage(anyDouble());
     }
 
     @Test void oneCommittedPlayerPastGraceLeavesTheFightWhileAnotherKeepsItAlive() throws Exception {
@@ -1484,7 +1522,8 @@ class InfestationManagerTest {
         when(p.isDead()).thenReturn(true);
         manager.onJoin(join); runLater();
         verify(p, never()).damage(anyDouble());
-        assertTrue(lure.getOwedDeaths().isEmpty(), "Already dead on return settles the debt");
+        assertEquals(Map.of(id, Set.of(Infestation.ACCOUNT)), lure.getOwedDeaths(),
+                "A player already dead is not killed again, and the debt waits for a settled death");
         lure.getOwedDeaths().put(id, new HashSet<>(Set.of(Infestation.ACCOUNT)));
         call("onPlayerDeath", p);
         assertTrue(lure.getOwedDeaths().isEmpty());
