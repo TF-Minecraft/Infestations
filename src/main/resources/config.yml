@@ -35,7 +35,7 @@ logout-grace-seconds: 300
 deserter-damage: 2
 # Rivers and lakes are provinces of their own. A player in one still counts
 # as inside a lure's province while that province's land is within this many
-# blocks. 0 counts every river as outside.
+# blocks (0 to 64). 0 counts every river as outside.
 river-reach: 16
 hologram-view-range: 96
 

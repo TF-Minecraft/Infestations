@@ -109,6 +109,12 @@ class LoadersTest {
     }
 
     @Test
+    void riverReachIsCappedSoTheGridScanStaysSmall() throws Exception {
+        new ConfigLoader().load(file("river-reach: 10000"));
+        assertEquals(64, Cache.riverReach);
+    }
+
+    @Test
     void completeConfigClampsUnsafeRangesAndNormalizesTerrainNames() throws Exception {
         assertTrue(new ConfigLoader().loadSafe(file("""
                 debug: true
