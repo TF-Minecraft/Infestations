@@ -103,8 +103,15 @@ class LoadersTest {
         assertEquals(16, Cache.minPlayerDistance);
         assertEquals(300, Cache.logoutGraceSeconds);
         assertEquals(2.0, Cache.deserterDamage);
+        assertEquals(16, Cache.riverReach);
         assertEquals(96.0, Cache.hologramViewRange);
         assertEquals(Set.of("water", "sea"), Cache.skipTerrains);
+    }
+
+    @Test
+    void riverReachIsCappedSoTheGridScanStaysSmall() throws Exception {
+        new ConfigLoader().load(file("river-reach: 10000"));
+        assertEquals(64, Cache.riverReach);
     }
 
     @Test
@@ -125,6 +132,7 @@ class LoadersTest {
                 min-player-distance: -1
                 logout-grace-seconds: 0
                 deserter-damage: 0
+                river-reach: -1
                 hologram-view-range: 0
                 skip-terrains: ['', 'FOREST', null]
                 """)));
@@ -144,6 +152,7 @@ class LoadersTest {
         assertEquals(0, Cache.minPlayerDistance);
         assertEquals(1, Cache.logoutGraceSeconds);
         assertEquals(0.5, Cache.deserterDamage);
+        assertEquals(0, Cache.riverReach);
         assertEquals(16.0, Cache.hologramViewRange);
         assertEquals(Set.of("forest"), Cache.skipTerrains);
     }

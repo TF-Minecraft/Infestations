@@ -31,15 +31,48 @@ public final class Provinces {
         if (location == null) {
             return UNKNOWN;
         }
-        SimpleFactions sf = SimpleFactions.getInstance();
-        if (sf == null) {
-            return UNKNOWN;
-        }
-        ProvinceGrid grid = sf.getProvinceGrid();
+        ProvinceGrid grid = grid();
         if (grid == null) {
             return UNKNOWN;
         }
         return grid.getAt(location.getBlockX(), location.getBlockZ());
+    }
+
+    /**
+     * Whether a player is inside a province for a lure: on its land, or in a river or lake
+     * ({@code WATER} province) with its land within {@link Cache#riverReach} blocks. Rivers are
+     * provinces of their own, so a river cutting through a province would otherwise count as
+     * leaving it.
+     */
+    public static boolean within(Player player, int provinceId) {
+        int at = at(player);
+        if (at == provinceId) {
+            return true;
+        }
+        return isWater(at) && near(player.getLocation(), provinceId, Cache.riverReach);
+    }
+
+    private static boolean near(Location location, int provinceId, int reach) {
+        ProvinceGrid grid = grid();
+        if (grid == null) {
+            return false;
+        }
+        int x = location.getBlockX();
+        int z = location.getBlockZ();
+        int reachSquared = reach * reach;
+        for (int dx = -reach; dx <= reach; dx++) {
+            for (int dz = -reach; dz <= reach; dz++) {
+                if (dx * dx + dz * dz <= reachSquared && grid.getAt(x + dx, z + dz) == provinceId) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static ProvinceGrid grid() {
+        SimpleFactions sf = SimpleFactions.getInstance();
+        return sf == null ? null : sf.getProvinceGrid();
     }
 
     public static Terrain terrain(int provinceId) {

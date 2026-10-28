@@ -46,6 +46,7 @@ public final class ConfigLoader implements LoaderInterface {
         Cache.minPlayerDistance = Math.max(0, config.getInt("min-player-distance", 16));
         Cache.logoutGraceSeconds = Math.max(1, config.getInt("logout-grace-seconds", 300));
         Cache.deserterDamage = Math.max(0.5, config.getDouble("deserter-damage", 2.0));
+        Cache.riverReach = Math.clamp(config.getInt("river-reach", 16), 0, 64);
         Cache.hologramViewRange = Math.max(16, config.getDouble("hologram-view-range", 96));
 
         Set<String> skip = new HashSet<>();

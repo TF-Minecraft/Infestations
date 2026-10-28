@@ -647,7 +647,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) {
                 continue;
             }
-            if (Provinces.at(player) == infestation.getProvinceId() || notAnswerable(infestation, player)) {
+            if (Provinces.within(player, infestation.getProvinceId()) || notAnswerable(infestation, player)) {
                 continue;
             }
             actionBar(player, bar);
@@ -674,7 +674,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                 player.sendMessage(Messages.get("lure-left"));
             }
             found = true;
-            boolean inProvince = Provinces.at(player) == infestation.getProvinceId();
+            boolean inProvince = Provinces.within(player, infestation.getProvinceId());
             // Leaving cannot forgive a death owed for abandoning the fight before.
             keepOwedDeath(infestation, id);
             infestation.getCommitted().remove(id);
@@ -804,7 +804,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             loc.getWorld().playSound(loc, Sound.ENTITY_WITHER_SPAWN, 0.4f, 1.4f);
         }
         for (Player player : Bukkit.getOnlinePlayers()) {
-            if (Provinces.at(player) == provinceId || committed.contains(player.getUniqueId())) {
+            if (Provinces.within(player, provinceId) || committed.contains(player.getUniqueId())) {
                 player.sendMessage(Messages.get("lure-fail"));
             }
         }
@@ -839,7 +839,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             loc.getWorld().playSound(loc, Sound.UI_TOAST_CHALLENGE_COMPLETE, 1f, 1.1f);
         }
         for (Player player : Bukkit.getOnlinePlayers()) {
-            if (Provinces.at(player) == provinceId) {
+            if (Provinces.within(player, provinceId)) {
                 player.sendMessage(Messages.get("lure-victory"));
             }
         }
@@ -1410,6 +1410,9 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             return;
         }
         if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) {
+            return;
+        }
+        if (Provinces.within(player, infestation.getProvinceId())) {
             return;
         }
         player.sendMessage(Messages.get("lure-outside"));

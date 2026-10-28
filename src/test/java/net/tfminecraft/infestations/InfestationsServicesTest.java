@@ -365,6 +365,34 @@ class InfestationsServicesTest {
             Cache.skipTerrains = Set.of(); assertTrue(Provinces.validLand(7));
         }
     }
+    @Test void riversWithinReachOfTheProvinceLandCountAsInside() {
+        int previousReach = Cache.riverReach;
+        try (var sf = mockStatic(SimpleFactions.class); var rest = mockStatic(RestServer.class)) {
+            Player player = mock(Player.class); when(player.getLocation()).thenReturn(new Location(null, 100, 64, 200));
+            rest.when(() -> RestServer.getProvince(player)).thenReturn(7);
+            assertTrue(Provinces.within(player, 7)); assertFalse(Provinces.within(null, 7));
+            rest.when(() -> RestServer.getProvince(player)).thenReturn(9);
+            assertFalse(Provinces.within(player, 7));
+            SimpleFactions factions = mock(SimpleFactions.class); sf.when(SimpleFactions::getInstance).thenReturn(factions);
+            ProvinceManager manager = mock(ProvinceManager.class); when(factions.getProvinceManager()).thenReturn(manager);
+            Province river = mock(Province.class); when(manager.get(9)).thenReturn(river);
+            when(river.getTerrain()).thenReturn(Terrain.WATER);
+            assertFalse(Provinces.within(player, 7));
+            ProvinceGrid grid = mock(ProvinceGrid.class); when(factions.getProvinceGrid()).thenReturn(grid);
+            when(grid.getAt(anyInt(), anyInt())).thenReturn(9);
+            Cache.riverReach = 16;
+            assertFalse(Provinces.within(player, 7));
+            when(grid.getAt(100, 216)).thenReturn(7);
+            assertTrue(Provinces.within(player, 7));
+            when(grid.getAt(100, 216)).thenReturn(9); when(grid.getAt(116, 216)).thenReturn(7);
+            assertFalse(Provinces.within(player, 7));
+            when(grid.getAt(100, 201)).thenReturn(7);
+            Cache.riverReach = 0; assertFalse(Provinces.within(player, 7));
+            Cache.riverReach = 1; assertTrue(Provinces.within(player, 7));
+            when(river.getTerrain()).thenReturn(Terrain.SEA);
+            assertFalse(Provinces.within(player, 7));
+        } finally { Cache.riverReach = previousReach; }
+    }
     @Test void terrainNamesUseStableLocale() {
         Locale previous = Locale.getDefault();
         try (var sf = mockStatic(SimpleFactions.class)) {
