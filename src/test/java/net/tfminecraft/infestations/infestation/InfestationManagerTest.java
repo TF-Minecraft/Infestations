@@ -75,6 +75,7 @@ class InfestationManagerTest {
     private final Map<PersistentDataContainer, Integer> tags = new IdentityHashMap<>();
     private final Map<PersistentDataContainer, String> kinds = new IdentityHashMap<>();
     private final Map<Object, Integer> provinces = new IdentityHashMap<>();
+    private final Map<Player, Integer> riverBanks = new IdentityHashMap<>();
     private final Map<UUID, Player> online = new HashMap<>();
     private final Map<String, Object> savedCache = new HashMap<>();
     private Infestations previousPlugin;
@@ -181,6 +182,11 @@ class InfestationManagerTest {
         groups.when(() -> GroupLoader.allowsTerrain(anyString(), anyInt())).thenReturn(true);
         provinceApi.when(() -> Provinces.at(any(Player.class))).thenAnswer(i -> provinces.getOrDefault(i.getArgument(0), -2));
         provinceApi.when(() -> Provinces.at(any(Location.class))).thenReturn(1);
+        provinceApi.when(() -> Provinces.within(any(Player.class), anyInt())).thenAnswer(i -> {
+            int province = i.getArgument(1);
+            return provinces.getOrDefault(i.getArgument(0), -2) == province
+                    || Objects.equals(riverBanks.get(i.<Player>getArgument(0)), province);
+        });
         provinceApi.when(() -> Provinces.validLand(anyInt())).thenAnswer(i -> (int) i.getArgument(0) > 0);
         planner.when(() -> SpawnPlanner.clearOfPlayers(any(), anyDouble())).thenReturn(true);
         planner.when(() -> SpawnPlanner.anchor(any())).thenReturn(new Location(world, 5.5, 65, 5.5));
@@ -1183,8 +1189,23 @@ class InfestationManagerTest {
         verify(p, never()).damage(anyDouble()); assertTrue(lure.getDeathOnLogin().contains(id));
     }
 
+    @Test void riversWithinReachKeepOnlyCommittedPlayersInside() throws Exception {
+        Infestation active = lure(1, LurePhase.ACTIVE);
+        Player wading = player(10), bystander = player(10), farRiver = player(10);
+        riverBanks.put(wading, 1); riverBanks.put(bystander, 1); riverBanks.put(farRiver, 2);
+        active.getCommitted().add(wading.getUniqueId()); active.getCommitted().add(farRiver.getUniqueId());
+        atTick(100); call("tickOutsideCommitted", active); call("warnNonJoiners", active);
+        verify(wading, never()).damage(anyDouble()); verify(wading, never()).sendMessage("lure-outside");
+        verify(farRiver).damage(2.0); verify(farRiver).sendMessage("lure-outside");
+        verify(bystander, never()).damage(anyDouble()); verify(bystander, never()).sendMessage("lure-nonjoiner");
+        PlayerProvinceLeaveEvent leave = mock(PlayerProvinceLeaveEvent.class);
+        when(leave.getPlayer()).thenReturn(wading); when(leave.getProvinceId()).thenReturn(1);
+        manager.onLeaveProvince(leave);
+        verify(wading, never()).sendMessage("lure-outside");
+    }
+
     @Test void provinceEventsWarnOnlyRelevantParticipants() {
-        Player p = player(1); PlayerProvinceLeaveEvent leave = mock(PlayerProvinceLeaveEvent.class);
+        Player p = player(2); PlayerProvinceLeaveEvent leave = mock(PlayerProvinceLeaveEvent.class);
         when(leave.getPlayer()).thenReturn(p); when(leave.getProvinceId()).thenReturn(1);
         manager.onLeaveProvince(leave); Infestation state = infestation(1); manager.onLeaveProvince(leave);
         state.setPhase(LurePhase.JOINING); manager.onLeaveProvince(leave);

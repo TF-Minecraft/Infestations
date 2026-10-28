@@ -26,6 +26,7 @@ public final class Cache {
     public static int minPlayerDistance = 16;
     public static int logoutGraceSeconds = 300;
     public static double deserterDamage = 2.0;
+    public static int riverReach = 16;
     public static double hologramViewRange = 96;
     public static Set<String> skipTerrains = new HashSet<>();
 

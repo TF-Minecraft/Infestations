@@ -16,7 +16,8 @@ commits to the fight, and defeats every monster the lure draws in.
 - **Lure raids** — an InteractibleFurniture lure opens a join window, then
   releases a paced wave; defeating the full wave clears the infestation.
 - **Committed parties** — a committed player who leaves the province takes
-  damage until they opt out of the fight. Losing the whole party
+  damage until they opt out of the fight. Rivers and lakes next to the
+  province's land still count as inside. Losing the whole party
   fails the lure, bystanders who stay are warned and damaged, and logged-out
   players get a grace period. A player still away when it ends no longer holds
   the lure, and that character dies when it next logs in.
