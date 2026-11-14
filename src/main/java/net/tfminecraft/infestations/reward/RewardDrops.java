@@ -42,9 +42,12 @@ public final class RewardDrops {
 
     private RewardDrops() {}
 
-    /** Adds the roll for one ambient mob killed by {@code killer} to the death drops. */
-    public static void ambientKill(Infestation infestation, Player killer, Location location, List<ItemStack> drops) {
-        if (!RewardConfig.appliesTo(infestation.getGroupId())) {
+    /**
+     * Drops the roll for one ambient mob killed by {@code killer} at its death location. The items go straight
+     * into the world because MythicMobs PreventOtherDrops clears the death event's drop list.
+     */
+    public static void ambientKill(Infestation infestation, Player killer, Location location) {
+        if (location == null || !RewardConfig.appliesTo(infestation.getGroupId())) {
             return;
         }
         RewardTable table = RewardConfig.ambient(infestation.getSeverity(), PermadeathZones.inZone(location));
@@ -56,7 +59,9 @@ public final class RewardDrops {
             if (drop.item().equals(RewardConfig.keyItem)) {
                 amount = keyCap.allow(killer.getUniqueId(), amount, RewardConfig.keyCapPerHour, clock.getAsLong());
             }
-            drops.addAll(stacks(drop.item(), amount));
+            for (ItemStack stack : stacks(drop.item(), amount)) {
+                location.getWorld().dropItemNaturally(location, stack);
+            }
         }
     }
 

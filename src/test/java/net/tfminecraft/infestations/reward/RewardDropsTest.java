@@ -113,35 +113,43 @@ class RewardDropsTest {
         return stacks.stream().filter(s -> s.getType() == type).mapToInt(ItemStack::getAmount).sum();
     }
 
-    @Test void ambientKillsAddCappedKeysAndOtherLootFromTheZoneTable() {
+    private List<ItemStack> naturalDrops() {
+        List<ItemStack> dropped = new ArrayList<>();
+        when(world.dropItemNaturally(eq(location), any(ItemStack.class))).thenAnswer(i -> {
+            dropped.add(i.getArgument(1)); return null; });
+        return dropped;
+    }
+
+    @Test void ambientKillsDropCappedKeysAndOtherLootFromTheZoneTableIntoTheWorld() {
         Player killer = mock(Player.class);
         when(killer.getUniqueId()).thenReturn(UUID.randomUUID());
         RewardConfig.ambient = Map.of(
                 RewardConfig.OUTSIDE, table(new Entry("stone", 1, 70, 70)),
                 Severity.SEVERE.id(), table(new Entry("key", 1, 2, 2), new Entry("stone", 1, 1, 1)));
         zones.when(() -> PermadeathZones.inZone(location)).thenReturn(true);
+        List<ItemStack> drops = naturalDrops();
 
-        List<ItemStack> drops = new ArrayList<>();
-        RewardDrops.ambientKill(infestation, killer, location, drops);
-        RewardDrops.ambientKill(infestation, killer, location, drops);
+        RewardDrops.ambientKill(infestation, killer, location);
+        RewardDrops.ambientKill(infestation, killer, location);
         assertEquals(3, total(drops, Material.TRIAL_KEY));
         assertEquals(2, total(drops, Material.STONE));
 
         drops.clear();
         zones.when(() -> PermadeathZones.inZone(location)).thenReturn(false);
-        RewardDrops.ambientKill(infestation, killer, location, drops);
+        RewardDrops.ambientKill(infestation, killer, location);
         assertEquals(List.of(64, 6), drops.stream().map(ItemStack::getAmount).toList());
     }
 
-    @Test void ambientKillsOutsideRewardGroupsOrWithoutATableDropNothing() {
+    @Test void ambientKillsOutsideRewardGroupsWithoutATableOrLocationDropNothing() {
         Player killer = mock(Player.class);
-        List<ItemStack> drops = new ArrayList<>();
+        List<ItemStack> drops = naturalDrops();
         RewardConfig.ambient = Map.of(RewardConfig.OUTSIDE, table(new Entry("stone", 1, 1, 1)));
+        RewardDrops.ambientKill(infestation, killer, null);
         when(infestation.getGroupId()).thenReturn("crypt");
-        RewardDrops.ambientKill(infestation, killer, location, drops);
+        RewardDrops.ambientKill(infestation, killer, location);
         when(infestation.getGroupId()).thenReturn("swamp_mobs");
         zones.when(() -> PermadeathZones.inZone(location)).thenReturn(true);
-        RewardDrops.ambientKill(infestation, killer, location, drops);
+        RewardDrops.ambientKill(infestation, killer, location);
         assertEquals(List.of(), drops);
     }
 

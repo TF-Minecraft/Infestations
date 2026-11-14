@@ -1161,7 +1161,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                 infestation.setAmbientAlive(infestation.getAmbientAlive() - 1);
             }
             if (killer != null && !Keys.isSummoned(entity.getPersistentDataContainer())) {
-                RewardDrops.ambientKill(infestation, killer, entity.getLocation(), event.getDrops());
+                RewardDrops.ambientKill(infestation, killer, entity.getLocation());
             }
             return;
         }
