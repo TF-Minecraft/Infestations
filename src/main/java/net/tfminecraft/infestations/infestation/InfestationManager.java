@@ -856,11 +856,18 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         for (UUID id : infestation.getCommitted()) {
             Player player = Bukkit.getPlayer(id);
             if (player != null && player.isOnline() && !player.isDead()
-                    && !infestation.getDeathOnLogin().contains(id) && !heldByOtherCharacter(infestation, player)) {
+                    && !infestation.getDeathOnLogin().contains(id) && !heldByOtherCharacter(infestation, player)
+                    && onJoinCharacter(infestation, player)) {
                 players.add(player);
             }
         }
         return players;
+    }
+
+    /** Lures saved before join characters were recorded have none, so any character passes. */
+    private static boolean onJoinCharacter(Infestation infestation, Player player) {
+        String joined = infestation.getJoinCharacter().get(player.getUniqueId());
+        return joined == null || joined.equalsIgnoreCase(Characters.activeId(player));
     }
 
     private void destroyLure(Infestation infestation, boolean victory) {
@@ -942,6 +949,12 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         infestation.getLogoutGraceUntil().remove(player.getUniqueId());
         infestation.getDeathOnLogin().remove(player.getUniqueId());
         infestation.getLogoutCharacter().remove(player.getUniqueId());
+        String character = Characters.activeId(player);
+        if (character != null) {
+            infestation.getJoinCharacter().put(player.getUniqueId(), character);
+        } else {
+            infestation.getJoinCharacter().remove(player.getUniqueId());
+        }
         player.sendMessage(Messages.get("lure-join"));
         save();
     }

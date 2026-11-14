@@ -864,13 +864,16 @@ class InfestationManagerTest {
         MockedStatic<RewardDrops> rewards = scoped(mockStatic(RewardDrops.class));
         Infestation active = lure(1, LurePhase.ACTIVE);
         Player fighter = player(1), dead = player(1), offline = player(1), owed = player(1), swapped = player(1);
-        Player sessionless = player(1);
+        Player sessionless = player(1), rejoined = player(1);
         UUID gone = UUID.randomUUID();
         characters.when(Characters::enabled).thenReturn(true);
-        for (Player p : List.of(fighter, dead, offline, owed, swapped)) current(p, UUID.randomUUID().toString());
+        for (Player p : List.of(fighter, dead, offline, owed, swapped, rejoined)) current(p, UUID.randomUUID().toString());
         active.getCommitted().add(sessionless.getUniqueId());
         when(dead.isDead()).thenReturn(true); when(offline.isOnline()).thenReturn(false);
-        for (Player p : List.of(fighter, dead, offline, owed, swapped)) active.getCommitted().add(p.getUniqueId());
+        for (Player p : List.of(fighter, dead, offline, owed, swapped, rejoined)) active.getCommitted().add(p.getUniqueId());
+        active.getJoinCharacter().put(fighter.getUniqueId(), Characters.activeId(fighter).toUpperCase(Locale.ROOT));
+        // A server restart ends sessions without recording a logout character; the join character still holds.
+        active.getJoinCharacter().put(rejoined.getUniqueId(), UUID.randomUUID().toString());
         active.getCommitted().add(gone);
         active.getDeathOnLogin().add(owed.getUniqueId());
         active.getLogoutCharacter().put(swapped.getUniqueId(), UUID.randomUUID().toString());
@@ -1113,6 +1116,7 @@ class InfestationManagerTest {
         verify(p).sendMessage("character-required");
         start(p, ALICE); call("tryJoin", p, lure);
         assertTrue(lure.isCommitted(id));
+        assertEquals(ALICE, lure.getJoinCharacter().get(id));
         CharacterSession old = sessions.get(id);
         end(p, CharacterSessionEndEvent.Reason.SWITCH);
         assertFalse(manager.leaveLure(p));

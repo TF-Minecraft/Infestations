@@ -23,4 +23,18 @@ class KeyCapTest {
         cap.clear();
         assertEquals(5, cap.allow(A, 5, 5, 0));
     }
+
+    @Test void forgetsPlayersWhoseKeysLeftTheWindowButKeepsRecentOnes() {
+        KeyCap cap = new KeyCap();
+        long w = KeyCap.WINDOW_MS;
+        cap.allow(A, 2, 5, 10);
+        cap.allow(B, 2, 5, w - 10);
+        assertEquals(2, cap.tracked());
+        cap.allow(B, 1, 5, w + 10);
+        assertEquals(1, cap.tracked());
+        assertEquals(2, cap.allow(B, 5, 5, w + 20));
+        cap.allow(A, 1, 5, w + 30);
+        assertEquals(2, cap.tracked());
+        assertEquals(0, cap.allow(B, 5, 5, w + 40));
+    }
 }

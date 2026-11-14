@@ -45,6 +45,8 @@ public final class Infestation {
     private final Set<UUID> deathOnLogin = new HashSet<>();
     /** The character each committed player logged off as, so a death on login reaches only that character. */
     private final Map<UUID, String> logoutCharacter = new HashMap<>();
+    /** The character each player committed with, so only that character can claim the lure's rewards. */
+    private final Map<UUID, String> joinCharacter = new HashMap<>();
     /**
      * Deaths still owed after their lure ended, by account: the characters that abandoned a running fight,
      * or {@link #ACCOUNT} on servers without characters. They outlive lures until settled; clearing the infestation forgives them.
@@ -137,6 +139,7 @@ public final class Infestation {
         this.lureKills.clear();
         this.deathOnLogin.clear();
         this.logoutCharacter.clear();
+        this.joinCharacter.clear();
         this.waveRetryAtTick = 0;
         this.lureActivatedAt = 0;
         this.lureReleased = 0;
@@ -159,6 +162,7 @@ public final class Infestation {
         lureKills.clear();
         deathOnLogin.clear();
         logoutCharacter.clear();
+        joinCharacter.clear();
         waveRetryAtTick = 0;
         lureActivatedAt = 0;
         lureReleased = 0;
@@ -321,6 +325,10 @@ public final class Infestation {
 
     public Map<UUID, String> getLogoutCharacter() {
         return logoutCharacter;
+    }
+
+    public Map<UUID, String> getJoinCharacter() {
+        return joinCharacter;
     }
 
     public Map<UUID, Set<String>> getOwedDeaths() {
