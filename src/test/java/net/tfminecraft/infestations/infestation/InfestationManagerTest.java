@@ -1134,6 +1134,13 @@ class InfestationManagerTest {
         assertTrue(lure.getLogoutGraceUntil().isEmpty());
         assertTrue(lure.getLogoutCharacter().isEmpty());
         assertTrue(manager.leaveLure(p));
+        lure.getLureKills().put(id, 5);
+        start(p, ALICE.toUpperCase(Locale.ROOT)); call("tryJoin", p, lure);
+        assertEquals(5, lure.getLureKills().get(id));
+        assertTrue(manager.leaveLure(p));
+        start(p, BOB); call("tryJoin", p, lure);
+        assertFalse(lure.getLureKills().containsKey(id));
+        assertEquals(BOB, lure.getJoinCharacter().get(id));
     }
 
     @Test void onlyTheSavedDeathOfTheDepartedCharacterSettlesItsLure() {

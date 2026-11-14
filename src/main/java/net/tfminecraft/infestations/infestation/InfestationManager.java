@@ -950,6 +950,11 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         infestation.getDeathOnLogin().remove(player.getUniqueId());
         infestation.getLogoutCharacter().remove(player.getUniqueId());
         String character = Characters.activeId(player);
+        String previous = infestation.getJoinCharacter().get(player.getUniqueId());
+        // Lure kills are counted per account, so a different character starts from zero.
+        if (previous != null && character != null && !previous.equalsIgnoreCase(character)) {
+            infestation.getLureKills().remove(player.getUniqueId());
+        }
         if (character != null) {
             infestation.getJoinCharacter().put(player.getUniqueId(), character);
         } else {
