@@ -72,6 +72,7 @@ import net.tfminecraft.infestations.loader.GroupLoader.GroupTune;
 import net.tfminecraft.infestations.lure.LureFurniture;
 import net.tfminecraft.infestations.lure.LureHologram;
 import net.tfminecraft.infestations.map.InfestationMapExport;
+import net.tfminecraft.infestations.reward.RewardDrops;
 import net.tfminecraft.infestations.spawn.AmbientSpawnService;
 import net.tfminecraft.infestations.spawn.Keys;
 import net.tfminecraft.infestations.spawn.LureSpawnQuota;
@@ -838,6 +839,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             loc.getWorld().spawnParticle(Particle.FIREWORK, loc.clone().add(0, 1, 0), 20, 0.3, 0.5, 0.3, 0.05);
             loc.getWorld().playSound(loc, Sound.UI_TOAST_CHALLENGE_COMPLETE, 1f, 1.1f);
         }
+        RewardDrops.lureVictory(infestation, loc, rewardable(infestation));
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (Provinces.within(player, provinceId)) {
                 player.sendMessage(Messages.get("lure-victory"));
@@ -846,6 +848,19 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         byProvince.remove(provinceId);
         save();
         InfestationMapExport.exportAsync(byProvince.values());
+    }
+
+    /** Committed players who are online, alive and on the character that joined the lure. */
+    private List<Player> rewardable(Infestation infestation) {
+        List<Player> players = new ArrayList<>();
+        for (UUID id : infestation.getCommitted()) {
+            Player player = Bukkit.getPlayer(id);
+            if (player != null && player.isOnline() && !player.isDead()
+                    && !infestation.getDeathOnLogin().contains(id) && !heldByOtherCharacter(infestation, player)) {
+                players.add(player);
+            }
+        }
+        return players;
     }
 
     private void destroyLure(Infestation infestation, boolean victory) {
@@ -1140,9 +1155,13 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             return;
         }
         recentDeaths.put(entity.getUniqueId(), new RecentDeath(provinceId, kind, tick));
+        Player killer = entity.getKiller();
         if (Keys.KIND_AMBIENT.equals(kind)) {
             if (infestation.getAmbientAlive() > 0) {
                 infestation.setAmbientAlive(infestation.getAmbientAlive() - 1);
+            }
+            if (killer != null && !Keys.isSummoned(entity.getPersistentDataContainer())) {
+                RewardDrops.ambientKill(infestation, killer, entity.getLocation(), event.getDrops());
             }
             return;
         }
@@ -1151,6 +1170,9 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                 infestation.setEnemiesAlive(infestation.getEnemiesAlive() - 1);
             }
             infestation.setLureRemaining(infestation.getLureRemaining() - 1);
+            if (killer != null) {
+                infestation.addLureKill(killer.getUniqueId());
+            }
         }
     }
 
@@ -1183,11 +1205,13 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         }
         if (infestation.getPhase() == LurePhase.ACTIVE && Keys.KIND_LURE.equals(death.kind())) {
             Keys.tagMob(living.getPersistentDataContainer(), death.provinceId(), Keys.KIND_LURE);
+            Keys.markSummoned(living.getPersistentDataContainer());
             infestation.setEnemiesAlive(infestation.getEnemiesAlive() + 1);
             infestation.setLureRemaining(infestation.getLureRemaining() + 1);
             SpawnLog.line(infestation, "-", "summoned remaining=" + infestation.getLureRemaining());
         } else if (infestation.getPhase() == LurePhase.NONE && Keys.KIND_AMBIENT.equals(death.kind())) {
             Keys.tagMob(living.getPersistentDataContainer(), death.provinceId(), Keys.KIND_AMBIENT);
+            Keys.markSummoned(living.getPersistentDataContainer());
             infestation.setAmbientAlive(infestation.getAmbientAlive() + 1);
         }
     }

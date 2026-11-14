@@ -1,0 +1,192 @@
+# Bonus loot for infestation kills and cleared lures.
+# These drops come on top of the mob's own MythicMobs drop table.
+#
+# Items are TLibs item paths (m.<type>.<id> for MMOItems).
+# Two special item names exist:
+#   denars - an amount of denars, paid out as physical coins from the coins list
+#   gem    - one gem pouch per unit, its tier rolled from the table's gems weights
+#
+# percent: chance for the entry to drop, 0-100. Defaults to 100.
+# amount:  a number or a range like 4-6. Defaults to 1.
+#
+# Permadeath zones come from RPCharacters. When RPCharacters is missing, every
+# location counts as outside a zone.
+
+enabled: true
+
+# Infestation groups that pay these rewards. An empty list means every group.
+groups:
+  - swamp_mobs
+  - swamp_mobs_hill
+
+# Coin items and their denar value. Denars are paid in the largest coins first.
+coins:
+  - {item: m.currency.pouch_of_coins, value: 100}
+  - {item: m.currency.stack_of_coins, value: 10}
+  - {item: m.currency.handful_of_coins, value: 5}
+  - {item: m.currency.gold_coin, value: 1}
+
+# One roll per ambient mob killed by a player. Mobs summoned by a dying
+# infestation mob (parasitic worms) roll nothing.
+ambient:
+  # Each player gets at most this many of key-item from ambient kills per
+  # rolling hour. 0 turns the cap off. Lure rewards ignore it.
+  key-item: m.loot.trial_key
+  key-cap-per-hour: 40
+
+  # Used for kills outside a permadeath zone, whatever the severity.
+  outside:
+    gems:
+      - {item: m.loot.basic_gemstone_pouch, weight: 90}
+      - {item: m.loot.polished_gemstone_pouch, weight: 10}
+    drops:
+      - {item: m.loot.trial_key, percent: 0.1}
+      - {item: gem, percent: 0.025}
+      - {item: denars, percent: 0.5}
+      - {item: m.currency.enchanted_dust, percent: 0.25}
+      - {item: m.materials.ignitium, percent: 0.05}
+      - {item: m.materials.raw_tin, percent: 0.005}
+      - {item: m.materials.abyssalite_fragment, percent: 0.005}
+      - {item: m.materials.mythril_fragment, percent: 0.0005}
+      - {item: m.materials.mythrilite, percent: 0.00025}
+
+  mild:
+    gems:
+      - {item: m.loot.basic_gemstone_pouch, weight: 90}
+      - {item: m.loot.polished_gemstone_pouch, weight: 10}
+    drops:
+      - {item: m.loot.trial_key, percent: 2}
+      - {item: gem, percent: 0.625}
+      - {item: denars, percent: 10}
+      - {item: m.currency.enchanted_dust, percent: 5}
+      - {item: m.materials.ignitium, percent: 1}
+      - {item: m.materials.raw_tin, percent: 0.1}
+      - {item: m.materials.abyssalite_fragment, percent: 0.1}
+      - {item: m.materials.mythril_fragment, percent: 0.01}
+      - {item: m.materials.mythrilite, percent: 0.005}
+
+  worrying:
+    gems:
+      - {item: m.loot.basic_gemstone_pouch, weight: 75}
+      - {item: m.loot.polished_gemstone_pouch, weight: 22}
+      - {item: m.loot.radiant_gemstone_pouch, weight: 3}
+    drops:
+      - {item: m.loot.trial_key, percent: 3}
+      - {item: gem, percent: 1}
+      - {item: denars, percent: 15}
+      - {item: m.currency.enchanted_dust, percent: 7.5}
+      - {item: m.materials.ignitium, percent: 1.5}
+      - {item: m.materials.raw_tin, percent: 0.15}
+      - {item: m.materials.abyssalite_fragment, percent: 0.15}
+      - {item: m.materials.mythril_fragment, percent: 0.015}
+      - {item: m.materials.mythrilite, percent: 0.0075}
+
+  severe:
+    gems:
+      - {item: m.loot.basic_gemstone_pouch, weight: 60}
+      - {item: m.loot.polished_gemstone_pouch, weight: 30}
+      - {item: m.loot.radiant_gemstone_pouch, weight: 9}
+      - {item: m.loot.mythical_gemstone_pouch, weight: 1}
+    drops:
+      - {item: m.loot.trial_key, percent: 4.5}
+      - {item: gem, percent: 1.5}
+      - {item: denars, percent: 22.5}
+      - {item: m.currency.enchanted_dust, percent: 11.25}
+      - {item: m.materials.ignitium, percent: 2.25}
+      - {item: m.materials.raw_tin, percent: 0.225}
+      - {item: m.materials.abyssalite_fragment, percent: 0.225}
+      - {item: m.materials.mythril_fragment, percent: 0.0225}
+      - {item: m.materials.mythrilite, percent: 0.01125}
+
+  extreme:
+    gems:
+      - {item: m.loot.basic_gemstone_pouch, weight: 45}
+      - {item: m.loot.polished_gemstone_pouch, weight: 35}
+      - {item: m.loot.radiant_gemstone_pouch, weight: 17}
+      - {item: m.loot.mythical_gemstone_pouch, weight: 3}
+    drops:
+      - {item: m.loot.trial_key, percent: 6}
+      - {item: gem, percent: 2}
+      - {item: denars, percent: 30}
+      - {item: m.currency.enchanted_dust, percent: 15}
+      - {item: m.materials.ignitium, percent: 3}
+      - {item: m.materials.raw_tin, percent: 0.3}
+      - {item: m.materials.abyssalite_fragment, percent: 0.3}
+      - {item: m.materials.mythril_fragment, percent: 0.03}
+      - {item: m.materials.mythrilite, percent: 0.015}
+
+# When a lure clears, each committed player who is alive and online and made at
+# least min-kills lure kills gets their own burst of items from the lure. Only
+# that player can pick their items up.
+lure:
+  min-kills: 3
+
+  # Lures outside a permadeath zone roll the same table, then each item survives
+  # with keep-percent. keep-items overrides it per item.
+  outside-zone:
+    keep-percent: 10
+    keep-items:
+      - {item: m.loot.trial_key, keep-percent: 5}
+      - {item: m.materials.raw_tin, keep-percent: 5}
+      - {item: m.materials.abyssalite_fragment, keep-percent: 5}
+      - {item: m.materials.mythril_fragment, keep-percent: 5}
+      - {item: m.materials.mythrilite, keep-percent: 5}
+      - {item: m.loot.radiant_gemstone_pouch, keep-percent: 0}
+      - {item: m.loot.mythical_gemstone_pouch, keep-percent: 0}
+
+  mild:
+    drops:
+      - {item: m.loot.trial_key, amount: 4-6}
+      - {item: denars, amount: 30-50}
+      - {item: m.currency.enchanted_dust, amount: 6-10}
+      - {item: m.loot.basic_gemstone_pouch, amount: 3-4}
+      - {item: m.loot.polished_gemstone_pouch, percent: 25}
+      - {item: m.materials.ignitium, amount: 3-5}
+      - {item: m.materials.raw_tin, amount: 1}
+      - {item: m.materials.abyssalite_fragment, amount: 1}
+      - {item: m.materials.mythril_fragment, percent: 2}
+      - {item: m.materials.mythrilite, percent: 1}
+
+  worrying:
+    drops:
+      - {item: m.loot.trial_key, amount: 7-10}
+      - {item: denars, amount: 60-100}
+      - {item: m.currency.enchanted_dust, amount: 12-18}
+      - {item: m.loot.basic_gemstone_pouch, amount: 4-6}
+      - {item: m.loot.polished_gemstone_pouch, amount: 1-2}
+      - {item: m.loot.radiant_gemstone_pouch, percent: 10}
+      - {item: m.materials.ignitium, amount: 6-9}
+      - {item: m.materials.raw_tin, amount: 1-2}
+      - {item: m.materials.abyssalite_fragment, amount: 1-2}
+      - {item: m.materials.mythril_fragment, percent: 4}
+      - {item: m.materials.mythrilite, percent: 2}
+
+  severe:
+    drops:
+      - {item: m.loot.trial_key, amount: 10-14}
+      - {item: denars, amount: 120-180}
+      - {item: m.currency.enchanted_dust, amount: 20-28}
+      - {item: m.loot.basic_gemstone_pouch, amount: 5-7}
+      - {item: m.loot.polished_gemstone_pouch, amount: 2-3}
+      - {item: m.loot.radiant_gemstone_pouch, percent: 50}
+      - {item: m.loot.mythical_gemstone_pouch, percent: 3}
+      - {item: m.materials.ignitium, amount: 10-14}
+      - {item: m.materials.raw_tin, amount: 2-3}
+      - {item: m.materials.abyssalite_fragment, amount: 2-3}
+      - {item: m.materials.mythril_fragment, percent: 7}
+      - {item: m.materials.mythrilite, percent: 3.5}
+
+  extreme:
+    drops:
+      - {item: m.loot.trial_key, amount: 14-20}
+      - {item: denars, amount: 200-300}
+      - {item: m.currency.enchanted_dust, amount: 30-40}
+      - {item: m.loot.basic_gemstone_pouch, amount: 6-8}
+      - {item: m.loot.polished_gemstone_pouch, amount: 3-4}
+      - {item: m.loot.radiant_gemstone_pouch, amount: 1-2}
+      - {item: m.loot.mythical_gemstone_pouch, percent: 12}
+      - {item: m.materials.ignitium, amount: 15-20}
+      - {item: m.materials.raw_tin, amount: 3-5}
+      - {item: m.materials.abyssalite_fragment, amount: 3-5}
+      - {item: m.materials.mythril_fragment, percent: 10}
+      - {item: m.materials.mythrilite, percent: 5}

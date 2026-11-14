@@ -41,6 +41,7 @@ public final class Infestation {
     private int victoryAtTick;
     private final Set<UUID> committed = new HashSet<>();
     private final Map<UUID, Long> logoutGraceUntil = new HashMap<>();
+    private final Map<UUID, Integer> lureKills = new HashMap<>();
     private final Set<UUID> deathOnLogin = new HashSet<>();
     /** The character each committed player logged off as, so a death on login reaches only that character. */
     private final Map<UUID, String> logoutCharacter = new HashMap<>();
@@ -133,6 +134,7 @@ public final class Infestation {
         this.enemiesAlive = 0;
         this.committed.clear();
         this.logoutGraceUntil.clear();
+        this.lureKills.clear();
         this.deathOnLogin.clear();
         this.logoutCharacter.clear();
         this.waveRetryAtTick = 0;
@@ -154,6 +156,7 @@ public final class Infestation {
         enemiesAlive = 0;
         committed.clear();
         logoutGraceUntil.clear();
+        lureKills.clear();
         deathOnLogin.clear();
         logoutCharacter.clear();
         waveRetryAtTick = 0;
@@ -298,6 +301,18 @@ public final class Infestation {
 
     public Map<UUID, Long> getLogoutGraceUntil() {
         return logoutGraceUntil;
+    }
+
+    public Map<UUID, Integer> getLureKills() {
+        return lureKills;
+    }
+
+    public void addLureKill(UUID id) {
+        lureKills.merge(id, 1, Integer::sum);
+    }
+
+    public int lureKills(UUID id) {
+        return lureKills.getOrDefault(id, 0);
     }
 
     public Set<UUID> getDeathOnLogin() {

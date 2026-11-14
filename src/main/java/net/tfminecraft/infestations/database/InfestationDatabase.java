@@ -121,6 +121,15 @@ public final class InfestationDatabase {
                 }
             }
         }
+        if (row.lureKills != null) {
+            for (Map.Entry<String, Integer> e : row.lureKills.entrySet()) {
+                if (e.getKey() == null || e.getValue() == null) continue;
+                try {
+                    infestation.getLureKills().put(UUID.fromString(e.getKey()), e.getValue());
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+        }
         if (row.deathOnLogin != null) {
             for (String id : row.deathOnLogin) {
                 if (id == null) continue;
@@ -177,6 +186,9 @@ public final class InfestationDatabase {
         }
         for (Map.Entry<UUID, Long> e : infestation.getLogoutGraceUntil().entrySet()) {
             row.logoutGraceUntil.put(e.getKey().toString(), e.getValue());
+        }
+        for (Map.Entry<UUID, Integer> e : infestation.getLureKills().entrySet()) {
+            row.lureKills.put(e.getKey().toString(), e.getValue());
         }
         for (UUID id : infestation.getDeathOnLogin()) {
             row.deathOnLogin.add(id.toString());

@@ -46,6 +46,7 @@ import net.tfminecraft.infestations.loader.GroupLoader.GroupTune;
 import net.tfminecraft.infestations.lure.LureFurniture;
 import net.tfminecraft.infestations.lure.LureHologram;
 import net.tfminecraft.infestations.map.InfestationMapExport;
+import net.tfminecraft.infestations.reward.RewardDrops;
 import net.tfminecraft.infestations.spawn.*;
 import net.tfminecraft.infestations.utils.Characters;
 import net.tfminecraft.infestations.utils.Provinces;
@@ -74,6 +75,7 @@ class InfestationManagerTest {
     private final List<Runnable> later = new ArrayList<>();
     private final Map<PersistentDataContainer, Integer> tags = new IdentityHashMap<>();
     private final Map<PersistentDataContainer, String> kinds = new IdentityHashMap<>();
+    private final Set<PersistentDataContainer> summoned = Collections.newSetFromMap(new IdentityHashMap<>());
     private final Map<Object, Integer> provinces = new IdentityHashMap<>();
     private final Map<Player, Integer> riverBanks = new IdentityHashMap<>();
     private final Map<UUID, Player> online = new HashMap<>();
@@ -148,6 +150,8 @@ class InfestationManagerTest {
             kinds.put(i.getArgument(0), i.getArgument(2));
             return null;
         });
+        keys.when(() -> Keys.markSummoned(any())).thenAnswer(i -> summoned.add(i.getArgument(0)));
+        keys.when(() -> Keys.isSummoned(any())).thenAnswer(i -> summoned.contains(i.getArgument(0)));
         MockedConstruction<AmbientSpawnService> ambientConstruction = scoped(mockConstruction(AmbientSpawnService.class));
         MockedStatic<ThreadLocalRandom> randomApi = scoped(mockStatic(ThreadLocalRandom.class));
         random = mock(ThreadLocalRandom.class);
@@ -833,6 +837,49 @@ class InfestationManagerTest {
         assertEquals(18, state.getLureRemaining());
     }
 
+    @Test void ambientKillsByPlayersRollRewardsUnlessSummonedAndLureKillsAreCounted() {
+        MockedStatic<RewardDrops> rewards = scoped(mockStatic(RewardDrops.class));
+        Infestation state = lure(1, LurePhase.ACTIVE); state.setAmbientAlive(5); state.setEnemiesAlive(5);
+        Player killer = player(1);
+        EntityDeathEvent death = mock(EntityDeathEvent.class);
+        List<ItemStack> drops = new ArrayList<>(); when(death.getDrops()).thenReturn(drops);
+        LivingEntity unkilled = mob(1, Keys.KIND_AMBIENT);
+        when(death.getEntity()).thenReturn(unkilled); manager.onDeath(death);
+        rewards.verifyNoInteractions();
+        LivingEntity killed = mob(1, Keys.KIND_AMBIENT); when(killed.getKiller()).thenReturn(killer);
+        Location at = new Location(world, 1, 2, 3); when(killed.getLocation()).thenReturn(at);
+        when(death.getEntity()).thenReturn(killed); manager.onDeath(death);
+        rewards.verify(() -> RewardDrops.ambientKill(state, killer, at, drops));
+        LivingEntity worm = mob(1, Keys.KIND_AMBIENT); when(worm.getKiller()).thenReturn(killer);
+        summoned.add(worm.getPersistentDataContainer());
+        when(death.getEntity()).thenReturn(worm); manager.onDeath(death);
+        rewards.verify(() -> RewardDrops.ambientKill(any(), any(), any(), any()), times(1));
+        LivingEntity lureMob = mob(1, Keys.KIND_LURE); when(lureMob.getKiller()).thenReturn(killer);
+        when(death.getEntity()).thenReturn(lureMob); manager.onDeath(death);
+        doReturn(mob(1, Keys.KIND_LURE)).when(death).getEntity(); manager.onDeath(death);
+        assertEquals(1, state.lureKills(killer.getUniqueId()));
+        assertEquals(Map.of(killer.getUniqueId(), 1), state.getLureKills());
+    }
+
+    @Test void lureVictoryRewardsOnlyLivingOnlinePlayersOnTheirCommittedCharacter() throws Exception {
+        MockedStatic<RewardDrops> rewards = scoped(mockStatic(RewardDrops.class));
+        Infestation active = lure(1, LurePhase.ACTIVE);
+        Player fighter = player(1), dead = player(1), offline = player(1), owed = player(1), swapped = player(1);
+        Player sessionless = player(1);
+        UUID gone = UUID.randomUUID();
+        characters.when(Characters::enabled).thenReturn(true);
+        for (Player p : List.of(fighter, dead, offline, owed, swapped)) current(p, UUID.randomUUID().toString());
+        active.getCommitted().add(sessionless.getUniqueId());
+        when(dead.isDead()).thenReturn(true); when(offline.isOnline()).thenReturn(false);
+        for (Player p : List.of(fighter, dead, offline, owed, swapped)) active.getCommitted().add(p.getUniqueId());
+        active.getCommitted().add(gone);
+        active.getDeathOnLogin().add(owed.getUniqueId());
+        active.getLogoutCharacter().put(swapped.getUniqueId(), UUID.randomUUID().toString());
+        active.setLureRemaining(0); call("tickVictory", active);
+        atTick(60); assertEquals(true, call("tickVictory", active));
+        rewards.verify(() -> RewardDrops.lureVictory(eq(active), any(Location.class), eq(List.of(fighter))));
+    }
+
     @Test void playerDeathRemovesCommitmentAndFailsActiveParty() {
         Infestation active = lure(1, LurePhase.ACTIVE); Infestation idle = infestation(2); infestation(3);
         Player p = player(1); active.getCommitted().add(p.getUniqueId()); idle.getCommitted().add(p.getUniqueId());
@@ -1256,6 +1303,7 @@ class InfestationManagerTest {
         manager.onMythicSpawn(spawn); runLater();
         assertEquals(1, tags.get(child.getPersistentDataContainer()));
         assertEquals(Keys.KIND_LURE, kinds.get(child.getPersistentDataContainer()));
+        assertTrue(summoned.contains(child.getPersistentDataContainer()));
         assertEquals(1, state.getEnemiesAlive()); assertEquals(20, state.getLureRemaining());
         manager.onMythicSpawn(spawn); runLater(); assertEquals(1, state.getEnemiesAlive());
         state.setPhase(LurePhase.NONE); atTick(119); tick.run();
@@ -1277,6 +1325,7 @@ class InfestationManagerTest {
         when(child.isDead()).thenReturn(true); call("adoptSummon", activeMob); assertEquals(0, state.getAmbientAlive());
         when(child.isDead()).thenReturn(false); call("adoptSummon", activeMob);
         assertEquals(1, state.getAmbientAlive()); assertEquals(Keys.KIND_AMBIENT, kinds.get(child.getPersistentDataContainer()));
+        assertTrue(summoned.contains(child.getPersistentDataContainer()));
         tags.clear(); state.setPhase(LurePhase.JOINING); call("adoptSummon", activeMob); assertTrue(tags.isEmpty());
         when(activeMob.getEntity().getBukkitEntity()).thenReturn(mock(Entity.class)); call("adoptSummon", activeMob);
         when(activeMob.getEntity()).thenReturn(null); call("adoptSummon", activeMob);

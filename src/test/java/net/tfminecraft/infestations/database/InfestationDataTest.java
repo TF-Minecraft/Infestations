@@ -143,6 +143,9 @@ class InfestationDataTest {
         infestation.getDeathOnLogin().add(PLAYER);
         infestation.getLogoutCharacter().put(PLAYER, "alice");
         infestation.getOwedDeaths().put(PLAYER, Set.of("bob"));
+        infestation.addLureKill(PLAYER);
+        infestation.addLureKill(PLAYER);
+        assertEquals(2, infestation.lureKills(PLAYER));
         infestation.setWaveRetryAtTick(5);
         infestation.setVictoryAtTick(6);
         infestation.setPendingSpawns(3);
@@ -165,6 +168,7 @@ class InfestationDataTest {
         assertTrue(infestation.getLogoutGraceUntil().isEmpty());
         assertTrue(infestation.getDeathOnLogin().isEmpty());
         assertTrue(infestation.getLogoutCharacter().isEmpty());
+        assertEquals(0, infestation.lureKills(PLAYER));
         assertEquals(Map.of(PLAYER, Set.of("bob")), infestation.getOwedDeaths(), "Owed deaths outlive lures");
         assertEquals(0, infestation.getPendingSpawns());
         assertEquals(0, infestation.getEnemiesAlive());
@@ -177,6 +181,7 @@ class InfestationDataTest {
         infestation.getLogoutGraceUntil().put(PLAYER, 100L);
         infestation.getDeathOnLogin().add(PLAYER);
         infestation.getLogoutCharacter().put(PLAYER, "alice");
+        infestation.addLureKill(PLAYER);
         infestation.clearLure();
         assertSame(LurePhase.NONE, infestation.getPhase());
         assertFalse(infestation.hasLure());
@@ -191,6 +196,7 @@ class InfestationDataTest {
         assertTrue(infestation.getLogoutGraceUntil().isEmpty());
         assertTrue(infestation.getDeathOnLogin().isEmpty());
         assertTrue(infestation.getLogoutCharacter().isEmpty());
+        assertTrue(infestation.getLureKills().isEmpty());
         assertEquals(Map.of(PLAYER, Set.of("bob")), infestation.getOwedDeaths());
     }
 
@@ -255,6 +261,7 @@ class InfestationDataTest {
         original.getDeathOnLogin().add(PLAYER);
         original.getLogoutCharacter().put(PLAYER, "alice");
         original.getOwedDeaths().put(PLAYER, Set.of("bob", "carol"));
+        original.getLureKills().put(PLAYER, 12);
         InfestationDatabase.save(List.of(original));
         assertTrue(Files.readString(InfestationDatabase.file().toPath()).contains("test-group"));
         Infestation loaded = InfestationDatabase.load().getFirst();
@@ -275,6 +282,7 @@ class InfestationDataTest {
         assertEquals(Set.of(PLAYER), loaded.getDeathOnLogin());
         assertEquals(Map.of(PLAYER, "alice"), loaded.getLogoutCharacter());
         assertEquals(Map.of(PLAYER, Set.of("bob", "carol")), loaded.getOwedDeaths());
+        assertEquals(Map.of(PLAYER, 12), loaded.getLureKills());
     }
 
     @Test
@@ -287,14 +295,17 @@ class InfestationDataTest {
                   "committed":["bad","%s"],"logoutGraceUntil":{"bad":5,"%s":6},
                   "deathOnLogin":["bad","%s"],"logoutCharacter":{"bad":"x","%s":"alice"},
                   "owedDeaths":{"bad":["x"],"%s":[null,"bob"]},
+                  "lureKills":{"bad":4,"null":2,"%s":5,"00000000-0000-0000-0000-000000000001":null},
                   "pendingSpawns":20,"lureReleased":3},
                  {"provinceId":4,"groupId":"legacy","severity":"worrying","committed":null,
                   "logoutGraceUntil":null,"deathOnLogin":null,"logoutCharacter":{"%s":null},
-                  "owedDeaths":{"%s":null}},
+                  "owedDeaths":{"%s":null},"lureKills":null},
                  {"provinceId":5,"groupId":"older","severity":"mild","owedDeaths":null}]
-                """.formatted(PLAYER, PLAYER, PLAYER, PLAYER, PLAYER, PLAYER, PLAYER));
+                """.formatted(PLAYER, PLAYER, PLAYER, PLAYER, PLAYER, PLAYER, PLAYER, PLAYER));
         List<Infestation> loaded = InfestationDatabase.load();
         assertEquals(3, loaded.size());
+        assertEquals(Map.of(PLAYER, 5), loaded.getFirst().getLureKills());
+        assertTrue(loaded.get(1).getLureKills().isEmpty());
         assertSame(LurePhase.NONE, loaded.getFirst().getPhase());
         assertEquals(Map.of(PLAYER, Set.of("bob")), loaded.getFirst().getOwedDeaths());
         assertTrue(loaded.get(1).getOwedDeaths().isEmpty());

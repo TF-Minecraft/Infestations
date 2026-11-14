@@ -33,6 +33,7 @@ lure-leave-or-join: "{prefix}#c9a44aA lure is activating. Leave or right-click t
 lure-nonjoiner: "{prefix}#c45c5cLeave this province. The lure has started without you."
 lure-nonjoiner-bar: "#c45c5cLeave this province. The lure has started without you."
 lure-victory: "{prefix}#7dba7aThe infestation is cleared."
+lure-reward: "{prefix}#c9a44aThe lure bursts open. Your spoils are marked for you."
 lure-fail: "{prefix}#c45c5cThe lure failed. The infestation remains."
 hologram-joining: "#c9a44aLure - join {seconds}s"
 hologram-remaining: "#c45c5cRemaining: #f0e6d0{remaining}"

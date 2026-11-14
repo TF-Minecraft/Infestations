@@ -4,12 +4,16 @@ import java.lang.reflect.*;
 import java.util.*;
 import net.tfminecraft.infestations.cache.Cache;
 import net.tfminecraft.infestations.loader.GroupLoader;
+import net.tfminecraft.infestations.reward.PermadeathZones;
+import net.tfminecraft.infestations.reward.RewardConfig;
+import net.tfminecraft.infestations.reward.RewardDrops;
 import net.tfminecraft.infestations.spawn.SpawnLog;
 
 public final class InfestationsTestState implements AutoCloseable {
     private final Map<Field,Object> state = new LinkedHashMap<>();
     public InfestationsTestState() throws Exception {
-        for (Class<?> type : List.of(Infestations.class, Cache.class, GroupLoader.class, Messages.class, SpawnLog.class)) {
+        for (Class<?> type : List.of(Infestations.class, Cache.class, GroupLoader.class, Messages.class, SpawnLog.class,
+                RewardConfig.class, RewardDrops.class, PermadeathZones.class)) {
             for (Field f : type.getDeclaredFields()) {
                 if (!Modifier.isStatic(f.getModifiers())) continue;
                 f.setAccessible(true);

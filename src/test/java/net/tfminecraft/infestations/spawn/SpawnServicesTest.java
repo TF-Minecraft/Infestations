@@ -153,6 +153,7 @@ class SpawnServicesTest {
         assertEquals(11, Keys.displayProvince(pdc));
         assertEquals("infestations", Keys.infestationId().getNamespace());
         assertNotEquals(Keys.infestationId(), Keys.displayProvince());
+        assertFalse(Keys.isSummoned(pdc)); Keys.markSummoned(pdc); assertTrue(Keys.isSummoned(pdc));
     }
 
     @Test void plannerRejectsMissingOriginsZeroRequestsAndUnloadedAreas() {
