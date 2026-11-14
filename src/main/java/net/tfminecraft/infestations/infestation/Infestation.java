@@ -41,9 +41,12 @@ public final class Infestation {
     private int victoryAtTick;
     private final Set<UUID> committed = new HashSet<>();
     private final Map<UUID, Long> logoutGraceUntil = new HashMap<>();
+    private final Map<UUID, Integer> lureKills = new HashMap<>();
     private final Set<UUID> deathOnLogin = new HashSet<>();
     /** The character each committed player logged off as, so a death on login reaches only that character. */
     private final Map<UUID, String> logoutCharacter = new HashMap<>();
+    /** The character each player committed with, so only that character can claim the lure's rewards. */
+    private final Map<UUID, String> joinCharacter = new HashMap<>();
     /**
      * Deaths still owed after their lure ended, by account: the characters that abandoned a running fight,
      * or {@link #ACCOUNT} on servers without characters. They outlive lures until settled; clearing the infestation forgives them.
@@ -133,8 +136,10 @@ public final class Infestation {
         this.enemiesAlive = 0;
         this.committed.clear();
         this.logoutGraceUntil.clear();
+        this.lureKills.clear();
         this.deathOnLogin.clear();
         this.logoutCharacter.clear();
+        this.joinCharacter.clear();
         this.waveRetryAtTick = 0;
         this.lureActivatedAt = 0;
         this.lureReleased = 0;
@@ -154,8 +159,10 @@ public final class Infestation {
         enemiesAlive = 0;
         committed.clear();
         logoutGraceUntil.clear();
+        lureKills.clear();
         deathOnLogin.clear();
         logoutCharacter.clear();
+        joinCharacter.clear();
         waveRetryAtTick = 0;
         lureActivatedAt = 0;
         lureReleased = 0;
@@ -300,12 +307,28 @@ public final class Infestation {
         return logoutGraceUntil;
     }
 
+    public Map<UUID, Integer> getLureKills() {
+        return lureKills;
+    }
+
+    public void addLureKill(UUID id) {
+        lureKills.merge(id, 1, Integer::sum);
+    }
+
+    public int lureKills(UUID id) {
+        return lureKills.getOrDefault(id, 0);
+    }
+
     public Set<UUID> getDeathOnLogin() {
         return deathOnLogin;
     }
 
     public Map<UUID, String> getLogoutCharacter() {
         return logoutCharacter;
+    }
+
+    public Map<UUID, String> getJoinCharacter() {
+        return joinCharacter;
     }
 
     public Map<UUID, Set<String>> getOwedDeaths() {

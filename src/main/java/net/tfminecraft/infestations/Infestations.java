@@ -87,6 +87,7 @@ public class Infestations extends JavaPlugin {
         ok &= configLoader.loadSafe(new File(getDataFolder(), "config.yml"));
         Messages.load(new File(getDataFolder(), "messages.yml"));
         ok &= groupLoader.loadSafe(new File(getDataFolder(), "groups.yml"));
+        ok &= net.tfminecraft.infestations.reward.RewardConfig.loadSafe(new File(getDataFolder(), "rewards.yml"));
         net.tfminecraft.infestations.spawn.SpawnLog.configure(
                 Cache.loggingEnabled, Cache.wipeLog, getDataFolder());
         if (ok) {
@@ -127,7 +128,8 @@ public class Infestations extends JavaPlugin {
         String[] defaultFiles = {
             "config.yml",
             "messages.yml",
-            "groups.yml"
+            "groups.yml",
+            "rewards.yml"
         };
         for (String path : defaultFiles) {
             copyResourceIfMissing(path);

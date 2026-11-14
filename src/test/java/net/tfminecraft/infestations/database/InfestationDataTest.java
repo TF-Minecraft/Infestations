@@ -142,7 +142,11 @@ class InfestationDataTest {
         infestation.getLogoutGraceUntil().put(PLAYER, 100L);
         infestation.getDeathOnLogin().add(PLAYER);
         infestation.getLogoutCharacter().put(PLAYER, "alice");
+        infestation.getJoinCharacter().put(PLAYER, "alice");
         infestation.getOwedDeaths().put(PLAYER, Set.of("bob"));
+        infestation.addLureKill(PLAYER);
+        infestation.addLureKill(PLAYER);
+        assertEquals(2, infestation.lureKills(PLAYER));
         infestation.setWaveRetryAtTick(5);
         infestation.setVictoryAtTick(6);
         infestation.setPendingSpawns(3);
@@ -165,6 +169,8 @@ class InfestationDataTest {
         assertTrue(infestation.getLogoutGraceUntil().isEmpty());
         assertTrue(infestation.getDeathOnLogin().isEmpty());
         assertTrue(infestation.getLogoutCharacter().isEmpty());
+        assertTrue(infestation.getJoinCharacter().isEmpty());
+        assertEquals(0, infestation.lureKills(PLAYER));
         assertEquals(Map.of(PLAYER, Set.of("bob")), infestation.getOwedDeaths(), "Owed deaths outlive lures");
         assertEquals(0, infestation.getPendingSpawns());
         assertEquals(0, infestation.getEnemiesAlive());
@@ -177,6 +183,8 @@ class InfestationDataTest {
         infestation.getLogoutGraceUntil().put(PLAYER, 100L);
         infestation.getDeathOnLogin().add(PLAYER);
         infestation.getLogoutCharacter().put(PLAYER, "alice");
+        infestation.getJoinCharacter().put(PLAYER, "alice");
+        infestation.addLureKill(PLAYER);
         infestation.clearLure();
         assertSame(LurePhase.NONE, infestation.getPhase());
         assertFalse(infestation.hasLure());
@@ -191,6 +199,8 @@ class InfestationDataTest {
         assertTrue(infestation.getLogoutGraceUntil().isEmpty());
         assertTrue(infestation.getDeathOnLogin().isEmpty());
         assertTrue(infestation.getLogoutCharacter().isEmpty());
+        assertTrue(infestation.getJoinCharacter().isEmpty());
+        assertTrue(infestation.getLureKills().isEmpty());
         assertEquals(Map.of(PLAYER, Set.of("bob")), infestation.getOwedDeaths());
     }
 
@@ -254,7 +264,9 @@ class InfestationDataTest {
         original.getLogoutGraceUntil().put(PLAYER, 9876L);
         original.getDeathOnLogin().add(PLAYER);
         original.getLogoutCharacter().put(PLAYER, "alice");
+        original.getJoinCharacter().put(PLAYER, "bob");
         original.getOwedDeaths().put(PLAYER, Set.of("bob", "carol"));
+        original.getLureKills().put(PLAYER, 12);
         InfestationDatabase.save(List.of(original));
         assertTrue(Files.readString(InfestationDatabase.file().toPath()).contains("test-group"));
         Infestation loaded = InfestationDatabase.load().getFirst();
@@ -274,7 +286,9 @@ class InfestationDataTest {
         assertEquals(9876L, loaded.getLogoutGraceUntil().get(PLAYER));
         assertEquals(Set.of(PLAYER), loaded.getDeathOnLogin());
         assertEquals(Map.of(PLAYER, "alice"), loaded.getLogoutCharacter());
+        assertEquals(Map.of(PLAYER, "bob"), loaded.getJoinCharacter());
         assertEquals(Map.of(PLAYER, Set.of("bob", "carol")), loaded.getOwedDeaths());
+        assertEquals(Map.of(PLAYER, 12), loaded.getLureKills());
     }
 
     @Test
@@ -286,15 +300,20 @@ class InfestationDataTest {
                  {"provinceId":3,"groupId":"valid","severity":"mild","phase":"old-phase",
                   "committed":["bad","%s"],"logoutGraceUntil":{"bad":5,"%s":6},
                   "deathOnLogin":["bad","%s"],"logoutCharacter":{"bad":"x","%s":"alice"},
+                  "joinCharacter":{"bad":"x","%s":"bob"},
                   "owedDeaths":{"bad":["x"],"%s":[null,"bob"]},
+                  "lureKills":{"bad":4,"null":2,"%s":5,"00000000-0000-0000-0000-000000000001":null},
                   "pendingSpawns":20,"lureReleased":3},
                  {"provinceId":4,"groupId":"legacy","severity":"worrying","committed":null,
                   "logoutGraceUntil":null,"deathOnLogin":null,"logoutCharacter":{"%s":null},
-                  "owedDeaths":{"%s":null}},
+                  "joinCharacter":null,
+                  "owedDeaths":{"%s":null},"lureKills":null},
                  {"provinceId":5,"groupId":"older","severity":"mild","owedDeaths":null}]
-                """.formatted(PLAYER, PLAYER, PLAYER, PLAYER, PLAYER, PLAYER, PLAYER));
+                """.formatted(PLAYER, PLAYER, PLAYER, PLAYER, PLAYER, PLAYER, PLAYER, PLAYER, PLAYER));
         List<Infestation> loaded = InfestationDatabase.load();
         assertEquals(3, loaded.size());
+        assertEquals(Map.of(PLAYER, 5), loaded.getFirst().getLureKills());
+        assertTrue(loaded.get(1).getLureKills().isEmpty());
         assertSame(LurePhase.NONE, loaded.getFirst().getPhase());
         assertEquals(Map.of(PLAYER, Set.of("bob")), loaded.getFirst().getOwedDeaths());
         assertTrue(loaded.get(1).getOwedDeaths().isEmpty());
@@ -307,6 +326,9 @@ class InfestationDataTest {
         assertTrue(loaded.get(1).getDeathOnLogin().isEmpty());
         assertEquals(Map.of(PLAYER, "alice"), loaded.getFirst().getLogoutCharacter());
         assertTrue(loaded.get(1).getLogoutCharacter().isEmpty());
+        assertEquals(Map.of(PLAYER, "bob"), loaded.getFirst().getJoinCharacter());
+        assertTrue(loaded.get(1).getJoinCharacter().isEmpty());
+        assertTrue(loaded.get(2).getJoinCharacter().isEmpty());
     }
 
     @Test

@@ -80,7 +80,7 @@ class InfestationsLifecycleTest {
         assertSame(plugin, Infestations.plugin);
         assertSame(managers.constructed().getFirst(), plugin.getInfestationManager());
         verify(plugin.getInfestationManager()).start();
-        for (String file : List.of("config.yml", "groups.yml", "messages.yml")) {
+        for (String file : List.of("config.yml", "groups.yml", "messages.yml", "rewards.yml")) {
             assertTrue(Files.isRegularFile(plugin.getDataFolder().toPath().resolve(file)));
         }
         for (String folder : List.of("Data", "MapAPI", "logs")) {
@@ -210,6 +210,13 @@ class InfestationsLifecycleTest {
 
     @Test void malformedGroupsMakeReloadFailWhileRetainingWorkingManager() throws Exception {
         Files.writeString(plugin.getDataFolder().toPath().resolve("groups.yml"), "groups: [broken");
+        InfestationManager running = plugin.getInfestationManager();
+        assertFalse(plugin.reloadAll());
+        assertSame(running, plugin.getInfestationManager()); verify(running).reloadFromDisk();
+    }
+
+    @Test void malformedRewardsMakeReloadFailWhileRetainingWorkingManager() throws Exception {
+        Files.writeString(plugin.getDataFolder().toPath().resolve("rewards.yml"), "ambient: [broken");
         InfestationManager running = plugin.getInfestationManager();
         assertFalse(plugin.reloadAll());
         assertSame(running, plugin.getInfestationManager()); verify(running).reloadFromDisk();

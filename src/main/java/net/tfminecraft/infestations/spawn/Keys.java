@@ -41,6 +41,19 @@ public final class Keys {
         return pdc.get(kind(), PersistentDataType.STRING);
     }
 
+    public static NamespacedKey summoned() {
+        return new NamespacedKey(Infestations.plugin, "summoned");
+    }
+
+    /** Marks a mob summoned by a dying infestation mob. Such mobs pay no kill rewards. */
+    public static void markSummoned(PersistentDataContainer pdc) {
+        pdc.set(summoned(), PersistentDataType.BYTE, (byte) 1);
+    }
+
+    public static boolean isSummoned(PersistentDataContainer pdc) {
+        return pdc.has(summoned(), PersistentDataType.BYTE);
+    }
+
     public static void tagDisplay(PersistentDataContainer pdc, int provinceId) {
         pdc.set(displayProvince(), PersistentDataType.INTEGER, provinceId);
     }
