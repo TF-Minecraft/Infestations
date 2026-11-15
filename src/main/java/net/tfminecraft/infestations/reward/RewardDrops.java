@@ -90,16 +90,10 @@ public final class RewardDrops {
             if (kills < RewardConfig.lureMinKills) {
                 continue;
             }
-            List<RewardRoller.Drop> drops = new ArrayList<>();
-            if (perKill != null) {
-                int rolls = (int) Math.min(MAX_LURE_ROLLS, (long) kills * RewardConfig.lureMultiplier);
-                drops.addAll(roller.roll(perKill, RewardConfig.coins, null, rolls, RewardConfig.keyItem));
-            }
-            if (bonus != null) {
-                drops.addAll(roller.roll(bonus, RewardConfig.coins, keep));
-            }
+            int rolls = (int) Math.min(MAX_LURE_ROLLS, (long) kills * RewardConfig.lureMultiplier);
             List<ItemStack> items = new ArrayList<>();
-            for (RewardRoller.Drop drop : drops) {
+            for (RewardRoller.Drop drop : roller.lurePayout(perKill, rolls, RewardConfig.keyItem, bonus, keep,
+                    RewardConfig.coins)) {
                 items.addAll(stacks(drop.item(), drop.amount()));
             }
             if (items.isEmpty()) {
