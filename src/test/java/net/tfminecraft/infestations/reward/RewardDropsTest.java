@@ -96,7 +96,65 @@ class RewardDropsTest {
         RewardConfig.keyItem = "key";
         RewardConfig.keyCapPerHour = 3;
         RewardConfig.lureMinKills = 3;
+        RewardConfig.lureMultiplier = 0;
+        RewardConfig.ambient = Map.of();
         RewardConfig.lureKeep = new RewardRoller.Keep(0, Map.of());
+    }
+
+    private List<ItemStack> thrownItems() {
+        List<ItemStack> thrown = new ArrayList<>();
+        Item entity = mock(Item.class);
+        when(world.dropItem(any(Location.class), any(ItemStack.class), any())).thenAnswer(i -> {
+            thrown.add(i.getArgument(1));
+            i.<Consumer<Item>>getArgument(2).accept(entity);
+            return entity;
+        });
+        return thrown;
+    }
+
+    @Test void lureVictoryPaysTheAmbientTablePerKillTimesTheMultiplierWithoutKeys() {
+        RewardConfig.lureMultiplier = 5;
+        RewardConfig.ambient = Map.of(
+                Severity.SEVERE.id(), table(new Entry("key", 1, 1, 1), new Entry("stone", 1, 1, 1)),
+                RewardConfig.OUTSIDE, table(new Entry("stone", 1, 2, 2)));
+        RewardConfig.lure = Map.of(Severity.SEVERE.id(), table(new Entry("key", 1, 4, 4)));
+        Player fighter = mock(Player.class);
+        UUID id = UUID.randomUUID();
+        when(fighter.getUniqueId()).thenReturn(id);
+        when(infestation.lureKills(id)).thenReturn(3);
+        List<ItemStack> thrown = thrownItems();
+
+        // In a zone: 3 kills x 5 rolls of the severe table, its key left out, plus the flat 4 keys.
+        zones.when(() -> PermadeathZones.inZone(location)).thenReturn(true);
+        RewardDrops.lureVictory(infestation, location, List.of(fighter));
+        later.forEach(Runnable::run);
+        assertEquals(15, total(thrown, Material.STONE));
+        assertEquals(4, total(thrown, Material.TRIAL_KEY));
+
+        // Outside: the outside table per kill, and the keep chance (0 here) only thins the flat bonus.
+        thrown.clear(); later.clear();
+        zones.when(() -> PermadeathZones.inZone(location)).thenReturn(false);
+        RewardDrops.lureVictory(infestation, location, List.of(fighter));
+        later.forEach(Runnable::run);
+        assertEquals(30, total(thrown, Material.STONE));
+        assertEquals(0, total(thrown, Material.TRIAL_KEY));
+
+        // Rolls are capped per player.
+        thrown.clear(); later.clear();
+        when(infestation.lureKills(id)).thenReturn(5_000);
+        RewardConfig.lure = Map.of();
+        RewardDrops.lureVictory(infestation, location, List.of(fighter));
+        later.forEach(Runnable::run);
+        assertEquals(2 * RewardDrops.MAX_LURE_ROLLS, total(thrown, Material.STONE));
+    }
+
+    @Test void lureVictoryWithAMultiplierButNoTablesPaysNothing() {
+        RewardConfig.lureMultiplier = 5;
+        RewardConfig.lure = Map.of();
+        Player fighter = mock(Player.class);
+        RewardDrops.lureVictory(infestation, location, List.of(fighter));
+        verifyNoInteractions(fighter);
+        assertEquals(List.of(), later);
     }
 
     @AfterEach void restore() throws Exception {

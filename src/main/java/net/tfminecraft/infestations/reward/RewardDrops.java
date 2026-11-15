@@ -32,6 +32,8 @@ public final class RewardDrops {
     static final int BURST_TICKS = 30;
     /** Most entities one rolled stack is split into during a burst. */
     static final int MAX_PIECES = 3;
+    /** Most ambient rolls one player's lure payout makes. */
+    static final int MAX_LURE_ROLLS = 10_000;
     static final String LURE_REWARD_FALLBACK = "{prefix}#c9a44aThe lure bursts open. Your spoils are marked for you.";
 
     static Random random = new Random();
@@ -66,24 +68,38 @@ public final class RewardDrops {
     }
 
     /**
-     * Gives each player with enough lure kills a burst of their own items from the lure. Outside a permadeath
-     * zone each item only survives with its keep chance.
+     * Gives each player with enough lure kills a burst of their own items from the lure. Each lure kill pays
+     * the ambient table for the lure's place {@code lure.multiplier} times (key items excluded), and the
+     * severity's lure table adds a flat bonus. Outside a permadeath zone each bonus item only survives with
+     * its keep chance.
      */
     public static void lureVictory(Infestation infestation, Location location, Collection<Player> players) {
         if (location == null || !RewardConfig.appliesTo(infestation.getGroupId())) {
             return;
         }
-        RewardTable table = RewardConfig.lure(infestation.getSeverity());
-        if (table == null) {
+        boolean inZone = PermadeathZones.inZone(location);
+        RewardTable perKill = RewardConfig.lureMultiplier > 0
+                ? RewardConfig.ambient(infestation.getSeverity(), inZone) : null;
+        RewardTable bonus = RewardConfig.lure(infestation.getSeverity());
+        if (perKill == null && bonus == null) {
             return;
         }
-        RewardRoller.Keep keep = PermadeathZones.inZone(location) ? null : RewardConfig.lureKeep;
+        RewardRoller.Keep keep = inZone ? null : RewardConfig.lureKeep;
         for (Player player : players) {
-            if (infestation.lureKills(player.getUniqueId()) < RewardConfig.lureMinKills) {
+            int kills = infestation.lureKills(player.getUniqueId());
+            if (kills < RewardConfig.lureMinKills) {
                 continue;
             }
+            List<RewardRoller.Drop> drops = new ArrayList<>();
+            if (perKill != null) {
+                int rolls = (int) Math.min(MAX_LURE_ROLLS, (long) kills * RewardConfig.lureMultiplier);
+                drops.addAll(roller.roll(perKill, RewardConfig.coins, null, rolls, RewardConfig.keyItem));
+            }
+            if (bonus != null) {
+                drops.addAll(roller.roll(bonus, RewardConfig.coins, keep));
+            }
             List<ItemStack> items = new ArrayList<>();
-            for (RewardRoller.Drop drop : roller.roll(table, RewardConfig.coins, keep)) {
+            for (RewardRoller.Drop drop : drops) {
                 items.addAll(stacks(drop.item(), drop.amount()));
             }
             if (items.isEmpty()) {

@@ -53,9 +53,8 @@ class RewardConfigTest {
         assertEquals("m.loot.trial_key", RewardConfig.keyItem);
         assertEquals(40, RewardConfig.keyCapPerHour);
         assertEquals(3, RewardConfig.lureMinKills);
+        assertEquals(5, RewardConfig.lureMultiplier);
         assertEquals(0.05, RewardConfig.lureKeep.of("m.loot.trial_key"), 1e-9);
-        assertEquals(0.0, RewardConfig.lureKeep.of("m.loot.mythical_gemstone_pouch"));
-        assertEquals(0.1, RewardConfig.lureKeep.of("m.currency.enchanted_dust"), 1e-9);
         for (Severity severity : Severity.values()) {
             assertNotNull(RewardConfig.ambient(severity, true));
             assertNotNull(RewardConfig.lure(severity));
@@ -63,6 +62,16 @@ class RewardConfigTest {
         }
         assertEquals(new Entry("m.loot.trial_key", 0.06, 1, 1), RewardConfig.ambient(Severity.EXTREME, true).drops().get(0));
         assertEquals(new Entry("m.loot.trial_key", 1, 14, 20), RewardConfig.lure(Severity.EXTREME).drops().get(0));
+        // Tin, fragments and dust are Ignitium / 40 in every ambient table, and no table pays mythril.
+        for (RewardTable table : RewardConfig.ambient.values()) {
+            Map<String, Double> chance = new java.util.HashMap<>();
+            table.drops().forEach(e -> chance.put(e.item(), e.chance()));
+            double ignitium = chance.get("m.materials.ignitium");
+            for (String trickle : List.of("m.materials.raw_tin", "m.materials.abyssalite_fragment", "m.currency.enchanted_dust")) {
+                assertEquals(ignitium / 40, chance.get(trickle), 1e-9, trickle);
+            }
+            assertFalse(chance.keySet().stream().anyMatch(item -> item.contains("mythril")));
+        }
         assertTrue(RewardConfig.appliesTo("SWAMP_MOBS"));
         assertFalse(RewardConfig.appliesTo("crypt"));
         assertFalse(RewardConfig.appliesTo(null));
@@ -104,10 +113,20 @@ class RewardConfigTest {
                 List.of(new Weighted("fine", 2)))), RewardConfig.ambient);
         assertNull(RewardConfig.ambient(Severity.MILD, false));
         assertEquals(0, RewardConfig.lureMinKills);
+        assertEquals(0, RewardConfig.lureMultiplier);
         assertEquals(1.0, RewardConfig.lureKeep.of("key"));
         assertEquals(1.0, RewardConfig.lureKeep.of("other"));
         assertEquals(Set.of(Severity.SEVERE.id()), RewardConfig.lure.keySet());
         assertNull(RewardConfig.lure(Severity.MILD));
+    }
+
+    @Test void lureMultiplierIsClampedToZeroToOneHundred() throws Exception {
+        assertTrue(RewardConfig.loadSafe(write("lure:\n  multiplier: -2\n")));
+        assertEquals(0, RewardConfig.lureMultiplier);
+        assertTrue(RewardConfig.loadSafe(write("lure:\n  multiplier: 500\n")));
+        assertEquals(100, RewardConfig.lureMultiplier);
+        assertTrue(RewardConfig.loadSafe(write("lure:\n  multiplier: 7\n")));
+        assertEquals(7, RewardConfig.lureMultiplier);
     }
 
     @Test void emptyGroupsApplyEverywhereUnlessDisabled() throws Exception {

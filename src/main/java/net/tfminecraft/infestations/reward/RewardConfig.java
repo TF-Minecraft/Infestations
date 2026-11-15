@@ -23,6 +23,7 @@ import net.tfminecraft.infestations.infestation.Severity;
 public final class RewardConfig {
 
     public static final String OUTSIDE = "outside";
+    static final int MAX_LURE_MULTIPLIER = 100;
 
     public static boolean enabled;
     public static Set<String> groups = Set.of();
@@ -31,6 +32,8 @@ public final class RewardConfig {
     public static int keyCapPerHour;
     public static Map<String, RewardTable> ambient = Map.of();
     public static int lureMinKills = 3;
+    /** Ambient rolls each lure kill pays at victory. 0 turns the per-kill payout off. */
+    public static int lureMultiplier;
     public static RewardRoller.Keep lureKeep = new RewardRoller.Keep(1, Map.of());
     public static Map<String, RewardTable> lure = Map.of();
 
@@ -73,6 +76,7 @@ public final class RewardConfig {
         ambient = Map.copyOf(ambientTables);
 
         lureMinKills = Math.max(0, config.getInt("lure.min-kills", 3));
+        lureMultiplier = Math.clamp(config.getInt("lure.multiplier", 0), 0, MAX_LURE_MULTIPLIER);
         Map<String, Double> keepItems = new HashMap<>();
         for (Map<?, ?> row : config.getMapList("lure.outside-zone.keep-items")) {
             String item = string(row.get("item"));

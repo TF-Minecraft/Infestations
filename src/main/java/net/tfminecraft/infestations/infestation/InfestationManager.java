@@ -1188,7 +1188,8 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                 infestation.setEnemiesAlive(infestation.getEnemiesAlive() - 1);
             }
             infestation.setLureRemaining(infestation.getLureRemaining() - 1);
-            if (killer != null) {
+            // Lure kills are paid per kill at victory, so summoned worms count no more than ambient ones.
+            if (killer != null && !Keys.isSummoned(entity.getPersistentDataContainer())) {
                 infestation.addLureKill(killer.getUniqueId());
             }
         }

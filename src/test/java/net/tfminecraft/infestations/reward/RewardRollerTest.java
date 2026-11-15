@@ -69,6 +69,19 @@ class RewardRollerTest {
         assertEquals(1.0, keep.of("whole"));
     }
 
+    @Test void manyRollsSkipOneItemAndSumDenarsBeforeCoins() {
+        RewardTable table = new RewardTable(List.of(
+                new Entry("key", 0.5, 1, 1),
+                new Entry("stone", 1, 2, 2),
+                new Entry("denars", 1, 3, 3)), List.of());
+        List<Coin> fives = List.of(new Coin("five", 5));
+        // The skipped key never draws a random number; 3 + 3 denars make one coin, though 3 alone makes none.
+        assertEquals(List.of(new Drop("stone", 4), new Drop("five", 1)),
+                new RewardRoller(new Script()).roll(table, fives, null, 2, "key"));
+        assertEquals(List.of(new Drop("stone", 2)), new RewardRoller(new Script()).roll(table, fives, null, 1, "key"));
+        assertEquals(List.of(), new RewardRoller(new Script()).roll(table, fives, null, 0, "key"));
+    }
+
     @Test void coinsUseLargestFirstAndSkipBadValues() {
         assertEquals(List.of(), RewardRoller.coins(0, COINS));
         assertEquals(List.of(), RewardRoller.coins(-5, COINS));
