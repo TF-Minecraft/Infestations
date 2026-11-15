@@ -856,6 +856,9 @@ class InfestationManagerTest {
         LivingEntity lureMob = mob(1, Keys.KIND_LURE); when(lureMob.getKiller()).thenReturn(killer);
         when(death.getEntity()).thenReturn(lureMob); manager.onDeath(death);
         doReturn(mob(1, Keys.KIND_LURE)).when(death).getEntity(); manager.onDeath(death);
+        LivingEntity lureWorm = mob(1, Keys.KIND_LURE); when(lureWorm.getKiller()).thenReturn(killer);
+        summoned.add(lureWorm.getPersistentDataContainer());
+        when(death.getEntity()).thenReturn(lureWorm); manager.onDeath(death);
         assertEquals(1, state.lureKills(killer.getUniqueId()));
         assertEquals(Map.of(killer.getUniqueId(), 1), state.getLureKills());
     }

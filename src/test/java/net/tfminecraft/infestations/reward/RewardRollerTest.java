@@ -69,6 +69,34 @@ class RewardRollerTest {
         assertEquals(1.0, keep.of("whole"));
     }
 
+    @Test void manyRollsSkipOneItemAndSumDenarsBeforeCoins() {
+        RewardTable table = new RewardTable(List.of(
+                new Entry("key", 0.5, 1, 1),
+                new Entry("stone", 1, 2, 2),
+                new Entry("denars", 1, 3, 3)), List.of());
+        List<Coin> fives = List.of(new Coin("five", 5));
+        // The skipped key never draws a random number; 3 + 3 denars make one coin, though 3 alone makes none.
+        assertEquals(List.of(new Drop("stone", 4), new Drop("five", 1)),
+                new RewardRoller(new Script()).roll(table, fives, null, 2, "key"));
+        assertEquals(List.of(new Drop("stone", 2)), new RewardRoller(new Script()).roll(table, fives, null, 1, "key"));
+        assertEquals(List.of(), new RewardRoller(new Script()).roll(table, fives, null, 0, "key"));
+    }
+
+    @Test void lurePayoutSumsDenarsFromRollsAndBonusAndThinsOnlyTheBonus() {
+        RewardTable perKill = new RewardTable(List.of(new Entry("key", 1, 1, 1), new Entry("denars", 1, 1, 1)), List.of());
+        RewardTable bonus = new RewardTable(List.of(new Entry("denars", 1, 3, 3), new Entry("stone", 1, 2, 2)), List.of());
+        List<Coin> fives = List.of(new Coin("five", 5));
+        Keep keepAll = new Keep(1, Map.of("stone", 0.0));
+        // 3 rolls give 3 denars, the bonus 3 more: 6 make one five-coin, though neither part alone does.
+        // The bonus stone is thinned to nothing; the per-kill rolls are never thinned and skip the key.
+        assertEquals(List.of(new Drop("five", 1)),
+                new RewardRoller(new Script()).lurePayout(perKill, 3, "key", bonus, keepAll, fives));
+        assertEquals(List.of(new Drop("key", 5), new Drop("five", 1)),
+                new RewardRoller(new Script()).lurePayout(perKill, 5, null, null, new Keep(0, Map.of()), fives));
+        assertEquals(List.of(new Drop("stone", 2)),
+                new RewardRoller(new Script()).lurePayout(null, 9, "key", bonus, null, fives));
+    }
+
     @Test void coinsUseLargestFirstAndSkipBadValues() {
         assertEquals(List.of(), RewardRoller.coins(0, COINS));
         assertEquals(List.of(), RewardRoller.coins(-5, COINS));

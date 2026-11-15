@@ -41,10 +41,55 @@ public final class RewardRoller {
      * denars are thinned before they are turned into coins.
      */
     public List<Drop> roll(RewardTable table, List<RewardTable.Coin> coins, Keep keep) {
+        return roll(table, coins, keep, 1, null);
+    }
+
+    /**
+     * Rolls the table {@code times} times and adds the results together. Entries for {@code skip} never roll.
+     * Denars from every roll are summed before they are turned into coins.
+     */
+    public List<Drop> roll(RewardTable table, List<RewardTable.Coin> coins, Keep keep, int times, String skip) {
         Map<String, Integer> out = new LinkedHashMap<>();
         int denars = 0;
+        for (int n = 0; n < times; n++) {
+            denars += rollOnce(table, keep, skip, out);
+        }
+        return finish(out, denars, coins);
+    }
+
+    /**
+     * One player's lure payout: {@code perKill} rolled {@code times} times without {@code skip} and unthinned,
+     * plus {@code bonus} rolled once with {@code keep}. Either table may be null. Denars from both are summed
+     * before they are turned into coins.
+     */
+    public List<Drop> lurePayout(RewardTable perKill, int times, String skip, RewardTable bonus, Keep keep,
+            List<RewardTable.Coin> coins) {
+        Map<String, Integer> out = new LinkedHashMap<>();
+        int denars = 0;
+        for (int n = 0; perKill != null && n < times; n++) {
+            denars += rollOnce(perKill, null, skip, out);
+        }
+        if (bonus != null) {
+            denars += rollOnce(bonus, keep, null, out);
+        }
+        return finish(out, denars, coins);
+    }
+
+    /** Turns the summed denars into coins and returns everything as drops. */
+    private static List<Drop> finish(Map<String, Integer> out, int denars, List<RewardTable.Coin> coins) {
+        for (Drop coin : coins(denars, coins)) {
+            add(out, coin.item(), coin.amount());
+        }
+        List<Drop> drops = new ArrayList<>();
+        out.forEach((item, amount) -> drops.add(new Drop(item, amount)));
+        return drops;
+    }
+
+    /** Rolls every entry once into {@code out} and returns the denars rolled. */
+    private int rollOnce(RewardTable table, Keep keep, String skip, Map<String, Integer> out) {
+        int denars = 0;
         for (RewardTable.Entry entry : table.drops()) {
-            if (!hit(entry.chance())) {
+            if (entry.item().equals(skip) || !hit(entry.chance())) {
                 continue;
             }
             int amount = amount(entry.min(), entry.max());
@@ -61,12 +106,7 @@ public final class RewardRoller {
                 add(out, entry.item(), kept(entry.item(), amount, keep));
             }
         }
-        for (Drop coin : coins(denars, coins)) {
-            add(out, coin.item(), coin.amount());
-        }
-        List<Drop> drops = new ArrayList<>();
-        out.forEach((item, amount) -> drops.add(new Drop(item, amount)));
-        return drops;
+        return denars;
     }
 
     /** Splits denars into coins, largest value first. Remainders smaller than the smallest coin are lost. */
