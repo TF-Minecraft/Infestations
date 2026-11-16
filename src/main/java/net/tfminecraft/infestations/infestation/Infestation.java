@@ -43,6 +43,8 @@ public final class Infestation {
     private final Map<UUID, Long> logoutGraceUntil = new HashMap<>();
     private final Map<UUID, Integer> lureKills = new HashMap<>();
     private final Set<UUID> deathOnLogin = new HashSet<>();
+    /** Accounts that died while committed to this lure. One life per account per lure, so they cannot rejoin it. */
+    private final Set<UUID> fallen = new HashSet<>();
     /** The character each committed player logged off as, so a death on login reaches only that character. */
     private final Map<UUID, String> logoutCharacter = new HashMap<>();
     /** The character each player committed with, so only that character can claim the lure's rewards. */
@@ -138,6 +140,7 @@ public final class Infestation {
         this.logoutGraceUntil.clear();
         this.lureKills.clear();
         this.deathOnLogin.clear();
+        this.fallen.clear();
         this.logoutCharacter.clear();
         this.joinCharacter.clear();
         this.waveRetryAtTick = 0;
@@ -161,6 +164,7 @@ public final class Infestation {
         logoutGraceUntil.clear();
         lureKills.clear();
         deathOnLogin.clear();
+        fallen.clear();
         logoutCharacter.clear();
         joinCharacter.clear();
         waveRetryAtTick = 0;
@@ -321,6 +325,10 @@ public final class Infestation {
 
     public Set<UUID> getDeathOnLogin() {
         return deathOnLogin;
+    }
+
+    public Set<UUID> getFallen() {
+        return fallen;
     }
 
     public Map<UUID, String> getLogoutCharacter() {

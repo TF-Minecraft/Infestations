@@ -100,6 +100,20 @@ class InfestationDataTest {
     }
 
     @Test
+    void fallenSkipsBadEntriesAndOlderSavesLoadWithNobodyFallen() throws Exception {
+        write("""
+                [{"provinceId":1,"groupId":"one","severity":"mild","fallen":[null,"bad","%s"]},
+                 {"provinceId":2,"groupId":"two","severity":"mild","fallen":null},
+                 {"provinceId":3,"groupId":"three","severity":"mild"}]
+                """.formatted(PLAYER));
+        List<Infestation> loaded = InfestationDatabase.load();
+        assertEquals(3, loaded.size());
+        assertEquals(Set.of(PLAYER), loaded.getFirst().getFallen());
+        assertTrue(loaded.get(1).getFallen().isEmpty());
+        assertTrue(loaded.get(2).getFallen().isEmpty());
+    }
+
+    @Test
     void nullGraceDeadlinesAreNotLoadedIntoTheExpiryQueue() throws Exception {
         write("""
                 [{"provinceId":1,"groupId":"one","severity":"mild","logoutGraceUntil":{"%s":null}}]
@@ -263,6 +277,7 @@ class InfestationDataTest {
         original.getCommitted().add(PLAYER);
         original.getLogoutGraceUntil().put(PLAYER, 9876L);
         original.getDeathOnLogin().add(PLAYER);
+        original.getFallen().add(PLAYER);
         original.getLogoutCharacter().put(PLAYER, "alice");
         original.getJoinCharacter().put(PLAYER, "bob");
         original.getOwedDeaths().put(PLAYER, Set.of("bob", "carol"));
@@ -285,6 +300,7 @@ class InfestationDataTest {
         assertEquals(Set.of(PLAYER), loaded.getCommitted());
         assertEquals(9876L, loaded.getLogoutGraceUntil().get(PLAYER));
         assertEquals(Set.of(PLAYER), loaded.getDeathOnLogin());
+        assertEquals(Set.of(PLAYER), loaded.getFallen());
         assertEquals(Map.of(PLAYER, "alice"), loaded.getLogoutCharacter());
         assertEquals(Map.of(PLAYER, "bob"), loaded.getJoinCharacter());
         assertEquals(Map.of(PLAYER, Set.of("bob", "carol")), loaded.getOwedDeaths());
