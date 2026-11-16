@@ -43,7 +43,7 @@ public final class Infestation {
     private final Map<UUID, Long> logoutGraceUntil = new HashMap<>();
     private final Map<UUID, Integer> lureKills = new HashMap<>();
     private final Set<UUID> deathOnLogin = new HashSet<>();
-    /** Accounts that died while committed to this lure. One life per account per lure, so they cannot rejoin it. */
+    /** Accounts that died in or left this lure while committed. One life per account per lure, so they cannot rejoin it. */
     private final Set<UUID> fallen = new HashSet<>();
     /** The character each committed player logged off as, so a death on login reaches only that character. */
     private final Map<UUID, String> logoutCharacter = new HashMap<>();
