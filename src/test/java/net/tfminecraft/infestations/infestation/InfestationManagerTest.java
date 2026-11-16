@@ -961,6 +961,26 @@ class InfestationManagerTest {
         assertFalse(state.isCommitted(id)); assertEquals(LurePhase.NONE, state.getPhase());
     }
 
+    @Test void aCommitmentDroppedBecauseTheCharacterDiedWhileAwayCannotRejoin() {
+        Infestation state = lure(1, LurePhase.ACTIVE);
+        Player p = player(1), fighter = player(1), stale = player(1); UUID id = p.getUniqueId();
+        state.getCommitted().add(id); state.getCommitted().add(fighter.getUniqueId());
+        characters.when(Characters::enabled).thenReturn(true);
+        state.getDeathOnLogin().add(id); state.getLogoutCharacter().put(id, ALICE);
+        state.getDeathOnLogin().add(stale.getUniqueId()); state.getLogoutCharacter().put(stale.getUniqueId(), BOB);
+        current(fighter, ALICE); current(p, BOB);
+        characters.when(() -> Characters.isDead(p, ALICE)).thenReturn(true);
+        manager.characterReturned(p);
+        assertFalse(state.isCommitted(id)); assertEquals(Set.of(id), state.getFallen());
+        assertEquals(LurePhase.ACTIVE, state.getPhase(), "The other fighter keeps the lure going");
+        call("tryJoin", p, state);
+        assertFalse(state.isCommitted(id)); verify(p).sendMessage("lure-fallen");
+        current(stale, BOB);
+        manager.characterReturned(stale);
+        assertFalse(state.getDeathOnLogin().contains(stale.getUniqueId()));
+        assertEquals(Set.of(id), state.getFallen(), "An uncommitted stale debt costs no life");
+    }
+
     @Test void anotherCharacterLoggingOffKeepsThePendingCharacterAndDeadline() {
         Infestation state = lure(1, LurePhase.ACTIVE); Infestation waiting = lure(2, LurePhase.ACTIVE);
         Player p = player(1); UUID id = p.getUniqueId();
