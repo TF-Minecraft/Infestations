@@ -610,6 +610,22 @@ class InfestationManagerTest {
         verify(ambient, times(2)).reconcileLoaded(manager);
     }
 
+    @Test void leavingARunningLureCostsThatLure() {
+        Infestation joining = lure(1, LurePhase.JOINING), active = lure(2, LurePhase.ACTIVE);
+        Player leaver = player(1), fighter = player(1), far = player(2), farFighter = player(2);
+        call("tryJoin", leaver, joining); call("tryJoin", fighter, joining);
+        call("tryJoin", far, active); call("tryJoin", farFighter, active);
+        assertTrue(manager.leaveLure(leaver)); assertTrue(manager.leaveLure(far));
+        assertEquals(Set.of(leaver.getUniqueId()), joining.getFallen());
+        assertEquals(Set.of(far.getUniqueId()), active.getFallen());
+        call("tryJoin", leaver, joining); call("tryJoin", far, active);
+        assertFalse(joining.isCommitted(leaver.getUniqueId())); assertFalse(active.isCommitted(far.getUniqueId()));
+        verify(leaver).sendMessage("lure-spent"); verify(far).sendMessage("lure-spent");
+        active.clearLure(); active.placeLure(lureBlock, Long.MAX_VALUE, 10);
+        call("tryJoin", far, active);
+        assertTrue(active.isCommitted(far.getUniqueId()), "A new lure gives the leaver a fresh place");
+    }
+
     @Test void graceExpiresIntoDeathOnLoginAndWipeNeedsNoSurvivorsOrGrace() {
         Infestation active = lure(1, LurePhase.ACTIVE);
         UUID expired = UUID.randomUUID(), grace = UUID.randomUUID();
@@ -907,7 +923,7 @@ class InfestationManagerTest {
         assertEquals(LurePhase.ACTIVE, active.getPhase(), "The lure goes on while someone is still fighting");
         call("tryJoin", fallen, active);
         assertFalse(active.isCommitted(fallen.getUniqueId()));
-        verify(fallen).sendMessage("lure-fallen");
+        verify(fallen).sendMessage("lure-spent");
         call("tryJoin", outsider, active);
         assertTrue(active.isCommitted(outsider.getUniqueId()), "Late joiners who never died can still join");
         active.clearLure();
@@ -974,7 +990,7 @@ class InfestationManagerTest {
         assertFalse(state.isCommitted(id)); assertEquals(Set.of(id), state.getFallen());
         assertEquals(LurePhase.ACTIVE, state.getPhase(), "The other fighter keeps the lure going");
         call("tryJoin", p, state);
-        assertFalse(state.isCommitted(id)); verify(p).sendMessage("lure-fallen");
+        assertFalse(state.isCommitted(id)); verify(p).sendMessage("lure-spent");
         current(stale, BOB);
         manager.characterReturned(stale);
         assertFalse(state.getDeathOnLogin().contains(stale.getUniqueId()));

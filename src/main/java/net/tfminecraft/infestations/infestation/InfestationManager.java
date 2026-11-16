@@ -679,6 +679,10 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             // Leaving cannot forgive a death owed for abandoning the fight before.
             keepOwedDeath(infestation, id);
             infestation.getCommitted().remove(id);
+            // Leaving spends the account's one place in a running lure, like dying in it.
+            if (infestation.getPhase() != LurePhase.NONE) {
+                infestation.getFallen().add(id);
+            }
             infestation.getLogoutGraceUntil().remove(id);
             infestation.getDeathOnLogin().remove(id);
             infestation.getLogoutCharacter().remove(id);
@@ -946,8 +950,8 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             return;
         }
         if (infestation.getFallen().contains(player.getUniqueId())) {
-            player.sendMessage(Messages.getOrDefault("lure-fallen",
-                    "{prefix}#c45c5cYou died in this lure. You cannot rejoin it."));
+            player.sendMessage(Messages.getOrDefault("lure-spent",
+                    "{prefix}#c45c5cYou already died in or left this lure. You cannot rejoin it."));
             return;
         }
         infestation.getCommitted().add(player.getUniqueId());
