@@ -945,6 +945,11 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             player.sendMessage(Messages.get("lure-already-joined"));
             return;
         }
+        if (infestation.getFallen().contains(player.getUniqueId())) {
+            player.sendMessage(Messages.getOrDefault("lure-fallen",
+                    "{prefix}#c45c5cYou died in this lure. You cannot rejoin it."));
+            return;
+        }
         infestation.getCommitted().add(player.getUniqueId());
         infestation.getLogoutGraceUntil().remove(player.getUniqueId());
         infestation.getDeathOnLogin().remove(player.getUniqueId());
@@ -1259,6 +1264,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             infestation.getDeathOnLogin().remove(id);
             infestation.getLogoutCharacter().remove(id);
             if (infestation.getPhase() != LurePhase.NONE) {
+                infestation.getFallen().add(id);
                 checkWipe(infestation);
             }
         }
@@ -1387,7 +1393,10 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                 infestation.getLogoutCharacter().remove(id);
                 changed = true;
                 // That character already died, or nothing is committed, so nothing is left to pay.
-                infestation.getCommitted().remove(id);
+                // A committed character that died in a running lure has used its life there.
+                if (infestation.getCommitted().remove(id) && infestation.getPhase() != LurePhase.NONE) {
+                    infestation.getFallen().add(id);
+                }
                 if (infestation.getPhase() != LurePhase.NONE) {
                     checkWipe(infestation);
                 }

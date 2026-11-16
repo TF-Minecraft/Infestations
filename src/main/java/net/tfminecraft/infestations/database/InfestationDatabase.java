@@ -130,15 +130,8 @@ public final class InfestationDatabase {
                 }
             }
         }
-        if (row.deathOnLogin != null) {
-            for (String id : row.deathOnLogin) {
-                if (id == null) continue;
-                try {
-                    infestation.getDeathOnLogin().add(UUID.fromString(id));
-                } catch (IllegalArgumentException ignored) {
-                }
-            }
-        }
+        readIds(row.deathOnLogin, infestation.getDeathOnLogin());
+        readIds(row.fallen, infestation.getFallen());
         readCharacters(row.logoutCharacter, infestation.getLogoutCharacter());
         readCharacters(row.joinCharacter, infestation.getJoinCharacter());
         if (row.owedDeaths != null) {
@@ -155,6 +148,19 @@ public final class InfestationDatabase {
             }
         }
         return infestation;
+    }
+
+    private static void readIds(List<String> source, Set<UUID> target) {
+        if (source == null) {
+            return;
+        }
+        for (String id : source) {
+            if (id == null) continue;
+            try {
+                target.add(UUID.fromString(id));
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
     }
 
     private static void readCharacters(Map<String, String> source, Map<UUID, String> target) {
@@ -198,6 +204,9 @@ public final class InfestationDatabase {
         }
         for (UUID id : infestation.getDeathOnLogin()) {
             row.deathOnLogin.add(id.toString());
+        }
+        for (UUID id : infestation.getFallen()) {
+            row.fallen.add(id.toString());
         }
         for (Map.Entry<UUID, String> e : infestation.getLogoutCharacter().entrySet()) {
             row.logoutCharacter.put(e.getKey().toString(), e.getValue());
