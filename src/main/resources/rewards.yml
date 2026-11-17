@@ -17,8 +17,9 @@
 # hour) at extreme in a zone earns what an average lucky miner earns in an
 # hour, 25.9 Ignitium. The other severities pay 1/3, 1/2 and 3/4 of extreme;
 # outside a zone pays half of mild. Tin, abyssalite fragments and dust are
-# Ignitium / 40 (the act's trickle ratio). Gems and denars fill the rest of a
-# miner's hour. Unknown Keys are unchanged.
+# Ignitium / 40 (the act's trickle ratio). Iron ingots drop at Ignitium's
+# chance, 1 per Ignitium like Activity (2026-11-17). Gems and denars fill
+# the rest of a miner's hour. Unknown Keys are unchanged.
 
 enabled: true
 
@@ -53,6 +54,7 @@ ambient:
       - {item: denars, percent: 4.35}
       - {item: m.currency.enchanted_dust, percent: 0.0275}
       - {item: m.materials.ignitium, percent: 1.1}
+      - {item: v.iron_ingot, percent: 1.1}
       - {item: m.materials.raw_tin, percent: 0.0275}
       - {item: m.materials.abyssalite_fragment, percent: 0.0275}
 
@@ -66,6 +68,7 @@ ambient:
       - {item: denars, percent: 8.7}
       - {item: m.currency.enchanted_dust, percent: 0.055}
       - {item: m.materials.ignitium, percent: 2.2}
+      - {item: v.iron_ingot, percent: 2.2}
       - {item: m.materials.raw_tin, percent: 0.055}
       - {item: m.materials.abyssalite_fragment, percent: 0.055}
 
@@ -80,6 +83,7 @@ ambient:
       - {item: denars, percent: 13}
       - {item: m.currency.enchanted_dust, percent: 0.08375}
       - {item: m.materials.ignitium, percent: 3.35}
+      - {item: v.iron_ingot, percent: 3.35}
       - {item: m.materials.raw_tin, percent: 0.08375}
       - {item: m.materials.abyssalite_fragment, percent: 0.08375}
 
@@ -95,6 +99,7 @@ ambient:
       - {item: denars, percent: 19.5}
       - {item: m.currency.enchanted_dust, percent: 0.125}
       - {item: m.materials.ignitium, percent: 5}
+      - {item: v.iron_ingot, percent: 5}
       - {item: m.materials.raw_tin, percent: 0.125}
       - {item: m.materials.abyssalite_fragment, percent: 0.125}
 
@@ -110,6 +115,7 @@ ambient:
       - {item: denars, percent: 26}
       - {item: m.currency.enchanted_dust, percent: 0.1675}
       - {item: m.materials.ignitium, percent: 6.7}
+      - {item: v.iron_ingot, percent: 6.7}
       - {item: m.materials.raw_tin, percent: 0.1675}
       - {item: m.materials.abyssalite_fragment, percent: 0.1675}
 
