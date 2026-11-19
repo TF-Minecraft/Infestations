@@ -526,7 +526,9 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                     SpawnLog.line(infestation, "-", "night");
                     return;
                 }
-                if (!planned.forced() && !SpawnPlanner.clearOfPlayers(spot, Cache.minPlayerDistance)) {
+                // Recheck: a player may have walked up or built a roof since the spot was planned.
+                if ((!planned.forced() && !SpawnPlanner.clearOfPlayers(spot, Cache.minPlayerDistance))
+                        || (!planned.anchor() && !SpawnPlanner.reachable(spot))) {
                     Location anchor = SpawnPlanner.anchor(origin);
                     if (anchor == null) {
                         infestation.setPendingSpawns(Math.max(0, infestation.getPendingSpawns() - 1));

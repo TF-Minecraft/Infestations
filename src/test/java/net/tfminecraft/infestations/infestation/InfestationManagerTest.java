@@ -196,6 +196,7 @@ class InfestationManagerTest {
         planner.when(() -> SpawnPlanner.anchor(any())).thenReturn(new Location(world, 5.5, 65, 5.5));
         planner.when(() -> SpawnPlanner.openSky(any())).thenReturn(true);
         planner.when(() -> SpawnPlanner.outsideInstallations(any())).thenReturn(true);
+        planner.when(() -> SpawnPlanner.reachable(any())).thenReturn(true);
         manager = new InfestationManager(plugin);
         ambient = ambientConstruction.constructed().getFirst();
         when(plugin.getInfestationManager()).thenReturn(manager);
@@ -519,6 +520,17 @@ class InfestationManagerTest {
             assertEquals(0, active.getLureReleased());
             log.verify(() -> SpawnLog.line(active, "-", "too-close"));
         }
+    }
+
+    @Test void plannedSpotThatBecameUnreachableUsesTheAnchor() {
+        Infestation active = lure(1, LurePhase.ACTIVE); active.setLureRemaining(1);
+        Location strict = new Location(world, 20, 64, 20), anchor = new Location(world, 5, 65, 5);
+        planner.when(() -> SpawnPlanner.find(any(), anyInt(), anyInt(), anyInt(), any())).thenReturn(List.of(strict));
+        call("spawnLureWave", active);
+        planner.when(() -> SpawnPlanner.reachable(strict)).thenReturn(false);
+        planner.when(() -> SpawnPlanner.anchor(any())).thenReturn(anchor);
+        runLater();
+        spawner.verify(() -> MythicSpawner.spawn(anchor, "zombies", 1, Keys.KIND_LURE));
     }
 
     @Test void planningCombinesStrictLooseAndAnchorSpotsAndEvaluatesFilters() {

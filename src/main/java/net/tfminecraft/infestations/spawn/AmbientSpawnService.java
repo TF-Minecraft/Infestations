@@ -121,7 +121,7 @@ public final class AmbientSpawnService {
                             + infestation.getAmbientAlive() + "/" + tune.ambientCap());
                     return;
                 }
-                if (Provinces.at(spot) != provinceId) {
+                if (Provinces.at(spot) != provinceId || !SpawnPlanner.reachable(spot)) {
                     SpawnLog.line(infestation, playerName, "no-spot");
                     return;
                 }

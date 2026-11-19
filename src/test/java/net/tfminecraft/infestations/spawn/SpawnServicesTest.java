@@ -141,7 +141,8 @@ class SpawnServicesTest {
     private MockedStatic<SpawnPlanner> planner(Location spot) {
         MockedStatic<SpawnPlanner> planner = scoped(mockStatic(SpawnPlanner.class));
         planner.when(() -> SpawnPlanner.find(any(), anyInt(), anyInt(), anyInt(), any())).thenReturn(List.of(spot));
-        planner.when(() -> SpawnPlanner.clearOfPlayers(any(), anyDouble())).thenReturn(true); return planner;
+        planner.when(() -> SpawnPlanner.clearOfPlayers(any(), anyDouble())).thenReturn(true);
+        planner.when(() -> SpawnPlanner.reachable(any())).thenReturn(true); return planner;
     }
     private void runCallbacks() { List<Runnable> pending = List.copyOf(callbacks); callbacks.clear(); pending.forEach(Runnable::run); }
 
@@ -340,6 +341,17 @@ class SpawnServicesTest {
             spawner.verifyNoInteractions();
             assertEquals(0, state.getAmbientAlive());
         }
+    }
+
+    @Test void delayedAmbientSpawnSkipsASpotThatBecameUnreachable() {
+        Player p = player(); Infestation state = infestation(1);
+        Location spot = new Location(world, 20, 64, 20); MockedStatic<SpawnPlanner> planner = planner(spot);
+        MockedStatic<MythicSpawner> spawner = scoped(mockStatic(MythicSpawner.class));
+        ambient.spawnAround(p, state, 1);
+        planner.when(() -> SpawnPlanner.reachable(spot)).thenReturn(false);
+        runCallbacks();
+        spawner.verifyNoInteractions();
+        log.verify(() -> SpawnLog.line(state, "Explorer", "no-spot"));
     }
 
     @ParameterizedTest @ValueSource(strings = {"unchanged", "provider-arrived", "reconnect"})
