@@ -1037,10 +1037,20 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             }
             return;
         }
+        String refusal = null;
         if (infestation.hasLure()) {
+            refusal = Messages.get("lure-already");
+        } else if (!SpawnPlanner.openSky(loc)) {
+            refusal = Messages.getOrDefault("lure-needs-sky",
+                    "{prefix}#c45c5cThe lure needs open sky above it. Monsters cannot reach it here.");
+        } else if (!SpawnPlanner.outsideInstallations(loc)) {
+            refusal = Messages.getOrDefault("lure-near-installation",
+                    "{prefix}#c45c5cA lure cannot be set this close to a fort, port, airport or train station.");
+        }
+        if (refusal != null) {
             event.setCancelled(true);
             if (player != null) {
-                player.sendMessage(Messages.get("lure-already"));
+                player.sendMessage(refusal);
             }
         }
     }

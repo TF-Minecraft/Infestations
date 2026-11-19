@@ -194,6 +194,8 @@ class InfestationManagerTest {
         provinceApi.when(() -> Provinces.validLand(anyInt())).thenAnswer(i -> (int) i.getArgument(0) > 0);
         planner.when(() -> SpawnPlanner.clearOfPlayers(any(), anyDouble())).thenReturn(true);
         planner.when(() -> SpawnPlanner.anchor(any())).thenReturn(new Location(world, 5.5, 65, 5.5));
+        planner.when(() -> SpawnPlanner.openSky(any())).thenReturn(true);
+        planner.when(() -> SpawnPlanner.outsideInstallations(any())).thenReturn(true);
         manager = new InfestationManager(plugin);
         ambient = ambientConstruction.constructed().getFirst();
         when(plugin.getInfestationManager()).thenReturn(manager);
@@ -732,6 +734,14 @@ class InfestationManagerTest {
         provinceApi.when(() -> Provinces.validLand(1)).thenReturn(false);
         manager.onFurniturePlace(event); verify(event).setCancelled(true);
         provinceApi.when(() -> Provinces.validLand(1)).thenReturn(true);
+        planner.when(() -> SpawnPlanner.openSky(any())).thenReturn(false);
+        clearInvocations(event); manager.onFurniturePlace(event); verify(event).setCancelled(true);
+        verify(owner).sendMessage("lure-needs-sky");
+        planner.when(() -> SpawnPlanner.openSky(any())).thenReturn(true);
+        planner.when(() -> SpawnPlanner.outsideInstallations(any())).thenReturn(false);
+        clearInvocations(event); manager.onFurniturePlace(event); verify(event).setCancelled(true);
+        verify(owner).sendMessage("lure-near-installation");
+        planner.when(() -> SpawnPlanner.outsideInstallations(any())).thenReturn(true);
         clearInvocations(event); manager.onFurniturePlace(event); verify(event, never()).setCancelled(true);
         manager.onFurniturePlaceDone(event);
         assertEquals(LurePhase.JOINING, state.getPhase()); assertTrue(state.isCommitted(owner.getUniqueId()));

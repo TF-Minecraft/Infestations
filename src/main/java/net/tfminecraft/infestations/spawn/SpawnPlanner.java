@@ -156,11 +156,16 @@ public final class SpawnPlanner {
      * where only the owning faction can dig or build.
      */
     public static boolean reachable(Location loc) {
-        World world = loc.getWorld();
-        if (Cache.requireOpenSky && world.getHighestBlockYAt(
-                loc.getBlockX(), loc.getBlockZ(), HeightMap.MOTION_BLOCKING_NO_LEAVES) >= loc.getBlockY()) {
-            return false;
-        }
+        return openSky(loc) && outsideInstallations(loc);
+    }
+
+    /** Nothing that blocks movement above the feet (leaves don't count). Always true when the rule is off. */
+    public static boolean openSky(Location loc) {
+        return !Cache.requireOpenSky || loc.getWorld().getHighestBlockYAt(
+                loc.getBlockX(), loc.getBlockZ(), HeightMap.MOTION_BLOCKING_NO_LEAVES) < loc.getBlockY();
+    }
+
+    public static boolean outsideInstallations(Location loc) {
         return InstallationLookup.findCovering(loc) == null;
     }
 
