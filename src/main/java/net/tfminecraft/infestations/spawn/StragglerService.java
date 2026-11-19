@@ -9,6 +9,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiPredicate;
 
+import io.papermc.paper.entity.TeleportFlag;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -54,7 +55,7 @@ public final class StragglerService {
      * removed, so the caller can recount the ambient cap.
      */
     public boolean tick(AmbientSpawnService.CollectionInfestations infestations, int tick) {
-        if (tick % SCAN_TICKS != 0) {
+        if (tick % SCAN_TICKS != 0 || (Cache.lureStragglerSeconds <= 0 && Cache.ambientStragglerSeconds <= 0)) {
             return false;
         }
         boolean removed = false;
@@ -129,14 +130,17 @@ public final class StragglerService {
 
     private static void pullToLure(LivingEntity mob, Infestation infestation) {
         Location origin = infestation.lureLocation();
-        if (origin == null) {
+        if (origin == null || !origin.isChunkLoaded()) {
             return;
         }
         int provinceId = infestation.getProvinceId();
         List<Location> spots = SpawnPlanner.findLoose(origin, PULL_RING_MIN, PULL_RING_MAX, 1,
                 loc -> Provinces.at(loc) == provinceId && SpawnPlanner.reachable(loc));
         Location spot = spots.isEmpty() ? SpawnPlanner.anchor(origin) : spots.get(0);
-        mob.teleport(spot);
+        if (!mob.teleport(spot, TeleportFlag.EntityState.RETAIN_PASSENGERS)) {
+            SpawnLog.line(infestation, "-", "straggler-pull-failed");
+            return;
+        }
         mob.addPotionEffect(new PotionEffect(PotionEffectType.GLOWING, 200, 0, false, false));
         SpawnLog.line(infestation, "-", "straggler-pulled");
     }

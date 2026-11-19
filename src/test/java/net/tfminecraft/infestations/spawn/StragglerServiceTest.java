@@ -7,6 +7,7 @@ import static org.mockito.Mockito.*;
 import java.util.*;
 import java.util.function.BiPredicate;
 
+import io.papermc.paper.entity.TeleportFlag;
 import org.bukkit.*;
 import org.bukkit.entity.*;
 import org.bukkit.potion.PotionEffect;
@@ -51,6 +52,7 @@ class StragglerServiceTest {
         Cache.lureStragglerSeconds = 60; Cache.ambientStragglerSeconds = 120;
         world = mock(World.class); otherWorld = mock(World.class);
         when(world.getLivingEntities()).thenReturn(entities); when(world.getPlayers()).thenReturn(worldPlayers);
+        when(world.isChunkLoaded(anyInt(), anyInt())).thenReturn(true);
         lure = new Location(world, 0, 64, 0);
         bukkit = scoped(mockStatic(Bukkit.class));
         bukkit.when(Bukkit::getWorlds).thenReturn(List.of(world));
@@ -84,6 +86,7 @@ class StragglerServiceTest {
         LivingEntity mob = mock(LivingEntity.class); PersistentDataContainerMock pdc = new PersistentDataContainerMock();
         when(mob.getPersistentDataContainer()).thenReturn(pdc); when(mob.getUniqueId()).thenReturn(UUID.randomUUID());
         when(mob.getLocation()).thenReturn(at);
+        when(mob.teleport(any(Location.class), any(TeleportFlag.class))).thenReturn(true);
         if (id != null) Keys.tagMob(pdc, id, kind);
         entities.add(mob); return mob;
     }
@@ -164,9 +167,9 @@ class StragglerServiceTest {
         LivingEntity buried = mob(1, Keys.KIND_LURE, new Location(world, 20, 50, 0));
         service.tick(collection, 0);
         assertFalse(service.tick(collection, 1160));
-        verify(buried, never()).teleport(any(Location.class));
+        verify(buried, never()).teleport(any(Location.class), any(TeleportFlag.class));
         assertFalse(service.tick(collection, 1200));
-        verify(buried).teleport(spot); verify(buried).addPotionEffect(any(PotionEffect.class)); verify(buried, never()).remove();
+        verify(buried).teleport(spot, TeleportFlag.EntityState.RETAIN_PASSENGERS); verify(buried).addPotionEffect(any(PotionEffect.class)); verify(buried, never()).remove();
         log.verify(() -> SpawnLog.line(state, "-", "straggler-pulled"));
     }
 
@@ -177,10 +180,26 @@ class StragglerServiceTest {
         planner.when(() -> SpawnPlanner.anchor(lure)).thenReturn(anchor);
         LivingEntity buried = mob(1, Keys.KIND_LURE, lure);
         service.tick(collection, 0); service.tick(collection, 1200);
-        verify(buried).teleport(anchor);
-        when(state.lureLocation()).thenReturn(null);
+        verify(buried).teleport(anchor, TeleportFlag.EntityState.RETAIN_PASSENGERS);
+        when(world.isChunkLoaded(anyInt(), anyInt())).thenReturn(false);
         service.tick(collection, 2400);
-        verify(buried, times(1)).teleport(any(Location.class));
+        when(state.lureLocation()).thenReturn(null);
+        service.tick(collection, 3600);
+        verify(buried, times(1)).teleport(any(Location.class), any(TeleportFlag.class));
+    }
+
+    @Test void aFailedPullIsLoggedWithoutGlowAndBothLimitsOffSkipTheScan() {
+        Infestation state = infestation(1, LurePhase.ACTIVE, Set.of());
+        planner.when(() -> SpawnPlanner.findLoose(any(), anyInt(), anyInt(), anyInt(), any())).thenReturn(List.of(lure));
+        LivingEntity carried = mob(1, Keys.KIND_LURE, lure);
+        when(carried.teleport(any(Location.class), any(TeleportFlag.class))).thenReturn(false);
+        service.tick(collection, 0); service.tick(collection, 1200);
+        verify(carried, never()).addPotionEffect(any(PotionEffect.class));
+        log.verify(() -> SpawnLog.line(state, "-", "straggler-pull-failed"));
+        Cache.lureStragglerSeconds = 0; Cache.ambientStragglerSeconds = 0;
+        clearInvocations(world);
+        assertFalse(service.tick(collection, 2400));
+        verify(world, never()).getLivingEntities();
     }
 
     @Test void reachableNeedsOpenSkyAndNoInstallation() {
