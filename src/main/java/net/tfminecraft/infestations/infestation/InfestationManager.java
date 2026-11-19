@@ -79,6 +79,7 @@ import net.tfminecraft.infestations.spawn.LureSpawnQuota;
 import net.tfminecraft.infestations.spawn.MythicSpawner;
 import net.tfminecraft.infestations.spawn.SpawnLog;
 import net.tfminecraft.infestations.spawn.SpawnPlanner;
+import net.tfminecraft.infestations.spawn.StragglerService;
 import net.tfminecraft.infestations.utils.Characters;
 import net.tfminecraft.infestations.utils.Provinces;
 
@@ -95,6 +96,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
     private final Map<Integer, Infestation> byProvince = new HashMap<>();
     private final Map<UUID, RecentDeath> recentDeaths = new HashMap<>();
     private final AmbientSpawnService ambient = new AmbientSpawnService();
+    private final StragglerService stragglers = new StragglerService();
     private boolean pluginFurnitureRemove;
     private boolean characterTracking;
     private BukkitTask task;
@@ -201,6 +203,9 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         tick++;
         long now = System.currentTimeMillis();
         ambient.tick(this, tick);
+        if (stragglers.tick(this, tick)) {
+            ambient.markDirty();
+        }
 
         for (Infestation infestation : List.copyOf(byProvince.values())) {
             expireGrace(infestation, now);
@@ -521,7 +526,9 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                     SpawnLog.line(infestation, "-", "night");
                     return;
                 }
-                if (!planned.forced() && !SpawnPlanner.clearOfPlayers(spot, Cache.minPlayerDistance)) {
+                // Recheck: a player may have walked up or built a roof since the spot was planned.
+                if ((!planned.forced() && !SpawnPlanner.clearOfPlayers(spot, Cache.minPlayerDistance))
+                        || (!planned.anchor() && !SpawnPlanner.reachable(spot))) {
                     Location anchor = SpawnPlanner.anchor(origin);
                     if (anchor == null) {
                         infestation.setPendingSpawns(Math.max(0, infestation.getPendingSpawns() - 1));
@@ -567,7 +574,8 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                 need,
                 loc -> GroupLoader.allowsY(infestation.getGroupId(), loc.getBlockY())
                         && SpawnPlanner.clearOfPlayers(loc, Cache.minPlayerDistance)
-                        && Provinces.at(loc) == provinceId)) {
+                        && Provinces.at(loc) == provinceId
+                        && SpawnPlanner.reachable(loc))) {
             planned.add(new LureSpot(spot, false, false));
         }
         if (planned.size() < need) {
@@ -578,7 +586,8 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                     ringMax,
                     missing,
                     loc -> GroupLoader.allowsY(infestation.getGroupId(), loc.getBlockY())
-                            && Provinces.at(loc) == provinceId)) {
+                            && Provinces.at(loc) == provinceId
+                            && SpawnPlanner.reachable(loc))) {
                 planned.add(new LureSpot(spot, true, false));
             }
         }
@@ -1030,10 +1039,20 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
             }
             return;
         }
+        String refusal = null;
         if (infestation.hasLure()) {
+            refusal = Messages.get("lure-already");
+        } else if (!SpawnPlanner.openSky(loc)) {
+            refusal = Messages.getOrDefault("lure-needs-sky",
+                    "{prefix}#c45c5cThe lure needs open sky above it. Monsters cannot reach it here.");
+        } else if (!SpawnPlanner.outsideInstallations(loc)) {
+            refusal = Messages.getOrDefault("lure-near-installation",
+                    "{prefix}#c45c5cA lure cannot be set this close to a fort, port, airport or train station.");
+        }
+        if (refusal != null) {
             event.setCancelled(true);
             if (player != null) {
-                player.sendMessage(Messages.get("lure-already"));
+                player.sendMessage(refusal);
             }
         }
     }

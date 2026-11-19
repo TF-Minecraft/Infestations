@@ -194,6 +194,9 @@ class InfestationManagerTest {
         provinceApi.when(() -> Provinces.validLand(anyInt())).thenAnswer(i -> (int) i.getArgument(0) > 0);
         planner.when(() -> SpawnPlanner.clearOfPlayers(any(), anyDouble())).thenReturn(true);
         planner.when(() -> SpawnPlanner.anchor(any())).thenReturn(new Location(world, 5.5, 65, 5.5));
+        planner.when(() -> SpawnPlanner.openSky(any())).thenReturn(true);
+        planner.when(() -> SpawnPlanner.outsideInstallations(any())).thenReturn(true);
+        planner.when(() -> SpawnPlanner.reachable(any())).thenReturn(true);
         manager = new InfestationManager(plugin);
         ambient = ambientConstruction.constructed().getFirst();
         when(plugin.getInfestationManager()).thenReturn(manager);
@@ -409,6 +412,15 @@ class InfestationManagerTest {
         verify(joined).sendMessage("lure-leave-or-join");
     }
 
+    @Test void removedStragglersTriggerAnAmbientRecount() throws Exception {
+        StragglerService stragglers = mock(StragglerService.class);
+        when(stragglers.tick(manager, 40)).thenReturn(true);
+        Field field = InfestationManager.class.getDeclaredField("stragglers");
+        field.setAccessible(true); field.set(manager, stragglers);
+        atTick(38); tick.run(); verify(ambient, never()).markDirty();
+        tick.run(); verify(ambient).markDirty();
+    }
+
     @Test void recountAdoptsOnlyMatchingLivingAmbientMobs() {
         Infestation active = lure(1, LurePhase.ACTIVE);
         active.setLureRemaining(1); active.setPendingSpawns(2);
@@ -510,12 +522,27 @@ class InfestationManagerTest {
         }
     }
 
+    @Test void plannedSpotThatBecameUnreachableUsesTheAnchor() {
+        Infestation active = lure(1, LurePhase.ACTIVE); active.setLureRemaining(1);
+        Location strict = new Location(world, 20, 64, 20), anchor = new Location(world, 5, 65, 5);
+        planner.when(() -> SpawnPlanner.find(any(), anyInt(), anyInt(), anyInt(), any())).thenReturn(List.of(strict));
+        call("spawnLureWave", active);
+        planner.when(() -> SpawnPlanner.reachable(strict)).thenReturn(false);
+        planner.when(() -> SpawnPlanner.anchor(any())).thenReturn(anchor);
+        runLater();
+        spawner.verify(() -> MythicSpawner.spawn(anchor, "zombies", 1, Keys.KIND_LURE));
+    }
+
     @Test void planningCombinesStrictLooseAndAnchorSpotsAndEvaluatesFilters() {
         Infestation active = lure(1, LurePhase.ACTIVE); active.setLureRemaining(3);
         Location strict = new Location(world, 20, 64, 20), loose = new Location(world, 10, 64, 10);
+        planner.when(() -> SpawnPlanner.reachable(any())).thenReturn(true);
         planner.when(() -> SpawnPlanner.find(any(), anyInt(), anyInt(), anyInt(), any())).thenAnswer(i -> {
             Predicate<Location> filter = i.getArgument(4);
             assertTrue(filter.test(strict));
+            planner.when(() -> SpawnPlanner.reachable(strict)).thenReturn(false);
+            assertFalse(filter.test(strict));
+            planner.when(() -> SpawnPlanner.reachable(strict)).thenReturn(true);
             groups.when(() -> GroupLoader.allowsY("zombies", 64)).thenReturn(false);
             assertFalse(filter.test(strict));
             groups.when(() -> GroupLoader.allowsY("zombies", 64)).thenReturn(true);
@@ -529,6 +556,8 @@ class InfestationManagerTest {
         });
         planner.when(() -> SpawnPlanner.findLoose(any(), anyInt(), anyInt(), anyInt(), any())).thenAnswer(i -> {
             Predicate<Location> filter = i.getArgument(4); assertTrue(filter.test(loose));
+            planner.when(() -> SpawnPlanner.reachable(loose)).thenReturn(false); assertFalse(filter.test(loose));
+            planner.when(() -> SpawnPlanner.reachable(loose)).thenReturn(true);
             groups.when(() -> GroupLoader.allowsY("zombies", 64)).thenReturn(false);
             assertFalse(filter.test(loose));
             groups.when(() -> GroupLoader.allowsY("zombies", 64)).thenReturn(true);
@@ -717,6 +746,14 @@ class InfestationManagerTest {
         provinceApi.when(() -> Provinces.validLand(1)).thenReturn(false);
         manager.onFurniturePlace(event); verify(event).setCancelled(true);
         provinceApi.when(() -> Provinces.validLand(1)).thenReturn(true);
+        planner.when(() -> SpawnPlanner.openSky(any())).thenReturn(false);
+        clearInvocations(event); manager.onFurniturePlace(event); verify(event).setCancelled(true);
+        verify(owner).sendMessage("lure-needs-sky");
+        planner.when(() -> SpawnPlanner.openSky(any())).thenReturn(true);
+        planner.when(() -> SpawnPlanner.outsideInstallations(any())).thenReturn(false);
+        clearInvocations(event); manager.onFurniturePlace(event); verify(event).setCancelled(true);
+        verify(owner).sendMessage("lure-near-installation");
+        planner.when(() -> SpawnPlanner.outsideInstallations(any())).thenReturn(true);
         clearInvocations(event); manager.onFurniturePlace(event); verify(event, never()).setCancelled(true);
         manager.onFurniturePlaceDone(event);
         assertEquals(LurePhase.JOINING, state.getPhase()); assertTrue(state.isCommitted(owner.getUniqueId()));

@@ -28,6 +28,9 @@ public final class Cache {
     public static double deserterDamage = 2.0;
     public static int riverReach = 16;
     public static double hologramViewRange = 96;
+    public static boolean requireOpenSky = true;
+    public static int lureStragglerSeconds = 60;
+    public static int ambientStragglerSeconds = 120;
     public static Set<String> skipTerrains = new HashSet<>();
 
     private Cache() {}

@@ -88,7 +88,8 @@ public final class AmbientSpawnService {
                 want,
                 loc -> GroupLoader.allowsY(infestation.getGroupId(), loc.getBlockY())
                         && SpawnPlanner.clearOfPlayers(loc, Cache.minPlayerDistance)
-                        && Provinces.at(loc) == provinceId);
+                        && Provinces.at(loc) == provinceId
+                        && SpawnPlanner.reachable(loc));
         if (spots.isEmpty()) {
             SpawnLog.line(infestation, playerName, "no-spot");
             return;
@@ -120,7 +121,7 @@ public final class AmbientSpawnService {
                             + infestation.getAmbientAlive() + "/" + tune.ambientCap());
                     return;
                 }
-                if (Provinces.at(spot) != provinceId) {
+                if (Provinces.at(spot) != provinceId || !SpawnPlanner.reachable(spot)) {
                     SpawnLog.line(infestation, playerName, "no-spot");
                     return;
                 }

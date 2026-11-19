@@ -38,6 +38,17 @@ deserter-damage: 2
 # blocks (0 to 64). 0 counts every river as outside.
 river-reach: 16
 hologram-view-range: 96
+# Ambient and lure mobs only spawn where nothing that blocks movement is above
+# them (leaves don't count), so never in caves or under roofs. Spots inside an
+# installation's protected radius are always skipped. The last-resort spot at
+# the lure itself ignores both rules.
+require-open-sky: true
+# A lure mob no player in the lure has had in sight for this long is moved next
+# to the lure. 0 turns it off.
+lure-straggler-seconds: 60
+# An ambient mob no player has had in sight for this long is removed (no loot).
+# 0 turns it off.
+ambient-straggler-seconds: 120
 
 skip-terrains:
   - water
