@@ -244,6 +244,7 @@ class SpawnServicesTest {
 
     @Test void ambientPlanningClampsRoomRejectsNoSpotsAndChecksAllFilters() {
         Player p = player(); Infestation state = infestation(1); MockedStatic<SpawnPlanner> planner = planner(origin);
+        planner.when(() -> SpawnPlanner.reachable(any())).thenReturn(true);
         state.setAmbientAlive(8); ambient.spawnAround(p, state, 3); assertTrue(callbacks.isEmpty());
         state.setAmbientAlive(0); ambient.spawnAround(p, state, 0); assertTrue(callbacks.isEmpty());
         planner.when(() -> SpawnPlanner.find(any(), anyInt(), anyInt(), anyInt(), any())).thenAnswer(i -> {
@@ -254,6 +255,8 @@ class SpawnServicesTest {
             groups.when(() -> GroupLoader.allowsY("zombies", 64)).thenReturn(true);
             planner.when(() -> SpawnPlanner.clearOfPlayers(origin, 16)).thenReturn(false); assertFalse(filter.test(origin));
             planner.when(() -> SpawnPlanner.clearOfPlayers(origin, 16)).thenReturn(true);
+            planner.when(() -> SpawnPlanner.reachable(origin)).thenReturn(false); assertFalse(filter.test(origin));
+            planner.when(() -> SpawnPlanner.reachable(origin)).thenReturn(true);
             provinces.when(() -> Provinces.at(origin)).thenReturn(2); assertFalse(filter.test(origin));
             return List.of();
         });

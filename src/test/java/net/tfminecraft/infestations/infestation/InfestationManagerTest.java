@@ -409,6 +409,15 @@ class InfestationManagerTest {
         verify(joined).sendMessage("lure-leave-or-join");
     }
 
+    @Test void removedStragglersTriggerAnAmbientRecount() throws Exception {
+        StragglerService stragglers = mock(StragglerService.class);
+        when(stragglers.tick(manager, 40)).thenReturn(true);
+        Field field = InfestationManager.class.getDeclaredField("stragglers");
+        field.setAccessible(true); field.set(manager, stragglers);
+        atTick(38); tick.run(); verify(ambient, never()).markDirty();
+        tick.run(); verify(ambient).markDirty();
+    }
+
     @Test void recountAdoptsOnlyMatchingLivingAmbientMobs() {
         Infestation active = lure(1, LurePhase.ACTIVE);
         active.setLureRemaining(1); active.setPendingSpawns(2);
@@ -513,9 +522,13 @@ class InfestationManagerTest {
     @Test void planningCombinesStrictLooseAndAnchorSpotsAndEvaluatesFilters() {
         Infestation active = lure(1, LurePhase.ACTIVE); active.setLureRemaining(3);
         Location strict = new Location(world, 20, 64, 20), loose = new Location(world, 10, 64, 10);
+        planner.when(() -> SpawnPlanner.reachable(any())).thenReturn(true);
         planner.when(() -> SpawnPlanner.find(any(), anyInt(), anyInt(), anyInt(), any())).thenAnswer(i -> {
             Predicate<Location> filter = i.getArgument(4);
             assertTrue(filter.test(strict));
+            planner.when(() -> SpawnPlanner.reachable(strict)).thenReturn(false);
+            assertFalse(filter.test(strict));
+            planner.when(() -> SpawnPlanner.reachable(strict)).thenReturn(true);
             groups.when(() -> GroupLoader.allowsY("zombies", 64)).thenReturn(false);
             assertFalse(filter.test(strict));
             groups.when(() -> GroupLoader.allowsY("zombies", 64)).thenReturn(true);
@@ -529,6 +542,8 @@ class InfestationManagerTest {
         });
         planner.when(() -> SpawnPlanner.findLoose(any(), anyInt(), anyInt(), anyInt(), any())).thenAnswer(i -> {
             Predicate<Location> filter = i.getArgument(4); assertTrue(filter.test(loose));
+            planner.when(() -> SpawnPlanner.reachable(loose)).thenReturn(false); assertFalse(filter.test(loose));
+            planner.when(() -> SpawnPlanner.reachable(loose)).thenReturn(true);
             groups.when(() -> GroupLoader.allowsY("zombies", 64)).thenReturn(false);
             assertFalse(filter.test(loose));
             groups.when(() -> GroupLoader.allowsY("zombies", 64)).thenReturn(true);

@@ -6,10 +6,14 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
 
 import org.bukkit.GameMode;
+import org.bukkit.HeightMap;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
+
+import net.tfminecraft.infestations.cache.Cache;
+import net.tfminecraft.simplefactions.installation.InstallationLookup;
 
 /**
  * Random spots in a ring. The strict search wants 3x3x3 air over a 3x3 solid floor; the loose search
@@ -144,6 +148,20 @@ public final class SpawnPlanner {
     private static boolean columnInWorld(World world, int y, boolean roomy) {
         int top = y + (roomy ? 2 : 1);
         return y - 1 >= world.getMinHeight() && top < world.getMaxHeight();
+    }
+
+    /**
+     * True when players can get to the spot: open sky above it (leaves don't count, when
+     * {@link Cache#requireOpenSky} is on) and outside every installation's protected radius,
+     * where only the owning faction can dig or build.
+     */
+    public static boolean reachable(Location loc) {
+        World world = loc.getWorld();
+        if (Cache.requireOpenSky && world.getHighestBlockYAt(
+                loc.getBlockX(), loc.getBlockZ(), HeightMap.MOTION_BLOCKING_NO_LEAVES) >= loc.getBlockY()) {
+            return false;
+        }
+        return InstallationLookup.findCovering(loc) == null;
     }
 
     /**

@@ -48,6 +48,9 @@ public final class ConfigLoader implements LoaderInterface {
         Cache.deserterDamage = Math.max(0.5, config.getDouble("deserter-damage", 2.0));
         Cache.riverReach = Math.clamp(config.getInt("river-reach", 16), 0, 64);
         Cache.hologramViewRange = Math.max(16, config.getDouble("hologram-view-range", 96));
+        Cache.requireOpenSky = config.getBoolean("require-open-sky", true);
+        Cache.lureStragglerSeconds = Math.max(0, config.getInt("lure-straggler-seconds", 60));
+        Cache.ambientStragglerSeconds = Math.max(0, config.getInt("ambient-straggler-seconds", 120));
 
         Set<String> skip = new HashSet<>();
         for (String t : config.getStringList("skip-terrains")) {

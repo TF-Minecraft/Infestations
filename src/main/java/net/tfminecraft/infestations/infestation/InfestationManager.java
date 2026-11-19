@@ -79,6 +79,7 @@ import net.tfminecraft.infestations.spawn.LureSpawnQuota;
 import net.tfminecraft.infestations.spawn.MythicSpawner;
 import net.tfminecraft.infestations.spawn.SpawnLog;
 import net.tfminecraft.infestations.spawn.SpawnPlanner;
+import net.tfminecraft.infestations.spawn.StragglerService;
 import net.tfminecraft.infestations.utils.Characters;
 import net.tfminecraft.infestations.utils.Provinces;
 
@@ -95,6 +96,7 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
     private final Map<Integer, Infestation> byProvince = new HashMap<>();
     private final Map<UUID, RecentDeath> recentDeaths = new HashMap<>();
     private final AmbientSpawnService ambient = new AmbientSpawnService();
+    private final StragglerService stragglers = new StragglerService();
     private boolean pluginFurnitureRemove;
     private boolean characterTracking;
     private BukkitTask task;
@@ -201,6 +203,9 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
         tick++;
         long now = System.currentTimeMillis();
         ambient.tick(this, tick);
+        if (stragglers.tick(this, tick)) {
+            ambient.markDirty();
+        }
 
         for (Infestation infestation : List.copyOf(byProvince.values())) {
             expireGrace(infestation, now);
@@ -567,7 +572,8 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                 need,
                 loc -> GroupLoader.allowsY(infestation.getGroupId(), loc.getBlockY())
                         && SpawnPlanner.clearOfPlayers(loc, Cache.minPlayerDistance)
-                        && Provinces.at(loc) == provinceId)) {
+                        && Provinces.at(loc) == provinceId
+                        && SpawnPlanner.reachable(loc))) {
             planned.add(new LureSpot(spot, false, false));
         }
         if (planned.size() < need) {
@@ -578,7 +584,8 @@ public final class InfestationManager implements Listener, AmbientSpawnService.C
                     ringMax,
                     missing,
                     loc -> GroupLoader.allowsY(infestation.getGroupId(), loc.getBlockY())
-                            && Provinces.at(loc) == provinceId)) {
+                            && Provinces.at(loc) == provinceId
+                            && SpawnPlanner.reachable(loc))) {
                 planned.add(new LureSpot(spot, true, false));
             }
         }

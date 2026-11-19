@@ -88,7 +88,8 @@ public final class AmbientSpawnService {
                 want,
                 loc -> GroupLoader.allowsY(infestation.getGroupId(), loc.getBlockY())
                         && SpawnPlanner.clearOfPlayers(loc, Cache.minPlayerDistance)
-                        && Provinces.at(loc) == provinceId);
+                        && Provinces.at(loc) == provinceId
+                        && SpawnPlanner.reachable(loc));
         if (spots.isEmpty()) {
             SpawnLog.line(infestation, playerName, "no-spot");
             return;
