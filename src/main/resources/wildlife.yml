@@ -15,20 +15,22 @@ attempts: 12
 # No try while this many creatures from this file are within player-cap-radius of the player.
 player-cap: 6
 player-cap-radius: 64
-# Creatures with no player within this distance are removed (checked every 10 seconds). They are
+# Creatures with no player within this distance are removed, checked every sweep-seconds. They are
 # never saved with their chunk.
 despawn-distance: 96
+sweep-seconds: 10
 
 # Each rule spawns one kind:
 #   mythic-mob: <MythicMobs mob id>   or   entity: <vanilla entity type>   (exactly one)
 #   biomes: biome names (DEEP_OCEAN or minecraft:deep_ocean)
-#   min-y / max-y: height band of the spawn block (default 50 / 64); it spawns 2 blocks under the
-#     water surface, or 1 block above the floor in shallower water
+#   min-y / max-y: height band of the spawn block (default 50 / 64)
+#   below-surface: blocks under the water surface it spawns at, never into the floor (default 2)
 #   min-depth: water blocks needed above the floor (default 2)
 #   chance: chance to spawn when a try picks this rule (default 1.0)
 #   cooldown-seconds: server-wide wait between two spawns of this rule (default 30)
 #   max-nearby / nearby-radius: no spawn while this many of this rule are within the radius
 #     (default 1 / 64)
+#   level: MythicMobs mob level (default 1; ignored for vanilla entities)
 rules:
   oarfish:
     mythic-mob: Oarfish

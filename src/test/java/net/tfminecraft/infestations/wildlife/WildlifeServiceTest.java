@@ -84,7 +84,7 @@ class WildlifeServiceTest {
         WildlifeConfig.enabled = true; WildlifeConfig.worlds = Set.of("TFMC_Map");
         WildlifeConfig.intervalTicks = 200; WildlifeConfig.ringMin = 24; WildlifeConfig.ringMax = 64;
         WildlifeConfig.attempts = 3; WildlifeConfig.playerCap = 6; WildlifeConfig.playerCapRadius = 64;
-        WildlifeConfig.despawnDistance = 96;
+        WildlifeConfig.despawnDistance = 96; WildlifeConfig.sweepTicks = 200;
         WildlifeConfig.rules = List.of(rule("cod", "entity: COD\nbiomes: [OCEAN]\nmax-nearby: 2\nnearby-radius: 32\n"));
         Cache.debug = false;
         service = new WildlifeService();
@@ -167,6 +167,33 @@ class WildlifeServiceTest {
         nextVanilla();
         service.tick();
         verify(world).spawnEntity(argThat(l -> l.getY() == 62), eq(EntityType.COD));
+    }
+
+    @Test void ruleDepthAndLevelComeFromItsSettingsAndTheBandUsesThatDepth() throws Exception {
+        WildlifeConfig.rules = List.of(rule("orca", "mythic-mob: Orca\nbiomes: [OCEAN]\nbelow-surface: 6\nlevel: 3\n"
+                + "min-y: 50\nmax-y: 58\n"));
+        player(GameMode.SURVIVAL, 0, 0);
+        MythicMob orca = mock(MythicMob.class);
+        when(mythic.getMobManager().getMythicMob("Orca")).thenReturn(Optional.of(orca));
+        ActiveMob active = mock(ActiveMob.class); AbstractEntity wrapper = mock(AbstractEntity.class);
+        when(orca.spawn(any(AbstractLocation.class), anyDouble())).thenReturn(active);
+        when(active.getEntity()).thenReturn(wrapper);
+        LivingEntity body = creature(); when(body.getLocation()).thenReturn(new Location(world, 24, 57, 0));
+        when(wrapper.getBukkitEntity()).thenReturn(body);
+        Cache.debug = true;
+        service.tick();
+        verify(orca).spawn(any(AbstractLocation.class), eq(3.0));
+        verify(logger).info("[Infestations] Wildlife orca at 24,57,0");
+    }
+
+    @Test void sweepRunsEverySweepSeconds() {
+        WildlifeConfig.sweepTicks = 40;
+        player(GameMode.SURVIVAL, 0, 0);
+        LivingEntity cod = nextVanilla();
+        service.tick();
+        when(cod.getLocation()).thenReturn(new Location(world, 400, 64, 0));
+        service.tick();
+        verify(cod).remove();
     }
 
     @Test void onlySurvivalAndAdventurePlayersInListedWorldsWhoAreAliveGetTries() {

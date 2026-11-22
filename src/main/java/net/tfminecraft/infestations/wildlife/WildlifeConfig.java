@@ -24,6 +24,7 @@ public final class WildlifeConfig {
     public static int playerCap = 6;
     public static int playerCapRadius = 64;
     public static int despawnDistance = 96;
+    public static int sweepTicks = 200;
     public static List<WildlifeRule> rules = List.of();
 
     private WildlifeConfig() {}
@@ -47,6 +48,7 @@ public final class WildlifeConfig {
         playerCap = Math.max(0, config.getInt("player-cap", 6));
         playerCapRadius = Math.max(1, config.getInt("player-cap-radius", 64));
         despawnDistance = Math.max(ringMax, config.getInt("despawn-distance", 96));
+        sweepTicks = Math.max(1, config.getInt("sweep-seconds", 10)) * 20;
 
         boolean ok = true;
         List<WildlifeRule> loaded = new ArrayList<>();
@@ -65,6 +67,8 @@ public final class WildlifeConfig {
             }
         }
         rules = List.copyOf(loaded);
+        Infestations.plugin.getLogger().info("[Infestations] Wildlife " + (enabled ? "on" : "off") + ": "
+                + rules.size() + " rules, worlds " + worlds);
         return ok;
     }
 }

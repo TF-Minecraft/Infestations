@@ -46,12 +46,17 @@ class WildlifeConfigTest {
         assertEquals(50, shark.minY()); assertEquals(64, shark.maxY()); assertEquals(2, shark.minDepth());
         assertEquals(1.0, shark.chance()); assertEquals(600, shark.cooldownTicks());
         assertEquals(1, shark.maxNearby()); assertEquals(64, shark.nearbyRadius());
+        assertEquals(2, shark.belowSurface()); assertEquals(1.0, shark.level());
+        assertEquals(61, shark.spawnY(63, 40)); assertEquals(62, shark.spawnY(63, 2));
 
         WildlifeRule cod = rule("entity: cod\nbiomes: [OCEAN]\nmin-y: 10\nmax-y: 20\nmin-depth: 0\nchance: 3\n"
-                + "cooldown-seconds: -5\nmax-nearby: 0\nnearby-radius: 0\n");
+                + "cooldown-seconds: -5\nmax-nearby: 0\nnearby-radius: 0\nbelow-surface: -3\nlevel: 0\n");
         assertEquals(EntityType.COD, cod.entity()); assertNull(cod.mythicMob());
         assertEquals(1, cod.minDepth()); assertEquals(1.0, cod.chance()); assertEquals(0, cod.cooldownTicks());
         assertEquals(1, cod.maxNearby()); assertEquals(1, cod.nearbyRadius());
+        assertEquals(0, cod.belowSurface()); assertEquals(1.0, cod.level()); assertEquals(63, cod.spawnY(63, 9));
+        WildlifeRule deep = rule("mythic-mob: Orca\nbiomes: [OCEAN]\nbelow-surface: 6\nlevel: 3\n");
+        assertEquals(6, deep.belowSurface()); assertEquals(3.0, deep.level()); assertEquals(57, deep.spawnY(63, 30));
         assertEquals(0.0, rule("entity: COD\nbiomes: [OCEAN]\nchance: -1\n").chance());
     }
 
@@ -85,6 +90,7 @@ class WildlifeConfigTest {
                 player-cap: -1
                 player-cap-radius: 0
                 despawn-distance: 0
+                sweep-seconds: 0
                 rules:
                   cod:
                     entity: COD
@@ -98,7 +104,7 @@ class WildlifeConfigTest {
         assertEquals(20, WildlifeConfig.intervalTicks); assertEquals(0, WildlifeConfig.ringMin);
         assertEquals(1, WildlifeConfig.ringMax); assertEquals(64, WildlifeConfig.attempts);
         assertEquals(0, WildlifeConfig.playerCap); assertEquals(1, WildlifeConfig.playerCapRadius);
-        assertEquals(1, WildlifeConfig.despawnDistance);
+        assertEquals(1, WildlifeConfig.despawnDistance); assertEquals(20, WildlifeConfig.sweepTicks);
         assertEquals(List.of("cod"), WildlifeConfig.rules.stream().map(WildlifeRule::id).toList());
         verify(logger).warning(contains("Skipping wildlife rule 'broken'"));
         verify(logger).warning(contains("Skipping wildlife rule 'scalar'"));
@@ -113,6 +119,8 @@ class WildlifeConfigTest {
         assertTrue(WildlifeConfig.enabled);
         assertEquals(11, WildlifeConfig.rules.size());
         assertEquals(200, WildlifeConfig.intervalTicks); assertEquals(96, WildlifeConfig.despawnDistance);
+        assertEquals(200, WildlifeConfig.sweepTicks);
+        verify(logger).info("[Infestations] Wildlife on: 11 rules, worlds [TFMC_Map]");
 
         Path empty = directory.resolve("empty.yml");
         Files.writeString(empty, "enabled: true\n");

@@ -41,7 +41,6 @@ import net.tfminecraft.infestations.cache.Cache;
 public final class WildlifeService {
 
     static final int TICK_PERIOD = 20;
-    static final int SWEEP_TICKS = 200;
 
     private final Map<UUID, String> spawned = new LinkedHashMap<>();
     private final Map<UUID, Integer> lastTry = new HashMap<>();
@@ -50,6 +49,7 @@ public final class WildlifeService {
     private List<WildlifeRule> knownRules;
     private BukkitTask task;
     private int tick;
+    private int lastSweep;
 
     public void start(Plugin plugin) {
         stop();
@@ -78,7 +78,8 @@ public final class WildlifeService {
 
     void tick() {
         tick += TICK_PERIOD;
-        if (tick % SWEEP_TICKS == 0) {
+        if (tick - lastSweep >= WildlifeConfig.sweepTicks) {
+            lastSweep = tick;
             sweep();
         }
         if (!WildlifeConfig.enabled || WildlifeConfig.rules.isEmpty()) {
@@ -138,16 +139,14 @@ public final class WildlifeService {
             if (depth < 1) {
                 continue;
             }
-            int y = surface - Math.min(2, depth - 1);
-            Location spot = new Location(world, x + 0.5, y, z + 0.5);
             // A player far above or below the water (flying, deep mines) would see it swept at once.
-            if (spot.distanceSquared(at) > reachSq) {
+            if (new Location(world, x + 0.5, surface, z + 0.5).distanceSquared(at) > reachSq) {
                 continue;
             }
-            String biome = world.getBiome(x, y, z).getKey().toString();
+            String biome = world.getBiome(x, surface, z).getKey().toString();
             List<WildlifeRule> fitting = new ArrayList<>();
             for (WildlifeRule rule : WildlifeConfig.rules) {
-                if (rule.fits(biome, y, depth) && ready(rule)
+                if (rule.fits(biome, rule.spawnY(surface, depth), depth) && ready(rule)
                         && (rule.mythicMob() == null || !warned.contains(rule.mythicMob()))) {
                     fitting.add(rule);
                 }
@@ -156,6 +155,7 @@ public final class WildlifeService {
                 continue;
             }
             WildlifeRule rule = fitting.get(random.nextInt(fitting.size()));
+            Location spot = new Location(world, x + 0.5, rule.spawnY(surface, depth), z + 0.5);
             if (countNear(spot, rule.nearbyRadius(), rule.id()) >= rule.maxNearby()) {
                 continue;
             }
@@ -183,7 +183,7 @@ public final class WildlifeService {
                 }
                 return false;
             }
-            ActiveMob active = mob.spawn(BukkitAdapter.adapt(spot), 1);
+            ActiveMob active = mob.spawn(BukkitAdapter.adapt(spot), rule.level());
             entity = active == null || active.getEntity() == null ? null : active.getEntity().getBukkitEntity();
         } else {
             entity = spot.getWorld().spawnEntity(spot, rule.entity());
