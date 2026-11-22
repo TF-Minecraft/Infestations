@@ -13,6 +13,8 @@ import net.tfminecraft.infestations.command.CommandManager;
 import net.tfminecraft.infestations.infestation.InfestationManager;
 import net.tfminecraft.infestations.loader.ConfigLoader;
 import net.tfminecraft.infestations.loader.GroupLoader;
+import net.tfminecraft.infestations.wildlife.WildlifeConfig;
+import net.tfminecraft.infestations.wildlife.WildlifeService;
 
 /**
  * Province infestations. See the Docs project guide for behaviour and configuration.
@@ -24,6 +26,7 @@ public class Infestations extends JavaPlugin {
     private final ConfigLoader configLoader = new ConfigLoader();
     private final GroupLoader groupLoader = new GroupLoader();
     private final CommandManager commandManager = new CommandManager();
+    private final WildlifeService wildlife = new WildlifeService();
     private InfestationManager infestationManager;
 
     @Override
@@ -45,6 +48,7 @@ public class Infestations extends JavaPlugin {
         infestationManager = new InfestationManager(this);
         getServer().getPluginManager().registerEvents(infestationManager, this);
         infestationManager.start();
+        wildlife.start(this);
 
         registerCommand("infestation");
         registerCommand("lure");
@@ -57,6 +61,7 @@ public class Infestations extends JavaPlugin {
         if (infestationManager != null) {
             infestationManager.shutdown();
         }
+        wildlife.stop();
         getLogger().info("Infestations disabled.");
     }
 
@@ -88,6 +93,7 @@ public class Infestations extends JavaPlugin {
         Messages.load(new File(getDataFolder(), "messages.yml"));
         ok &= groupLoader.loadSafe(new File(getDataFolder(), "groups.yml"));
         ok &= net.tfminecraft.infestations.reward.RewardConfig.loadSafe(new File(getDataFolder(), "rewards.yml"));
+        ok &= WildlifeConfig.loadSafe(new File(getDataFolder(), "wildlife.yml"));
         net.tfminecraft.infestations.spawn.SpawnLog.configure(
                 Cache.loggingEnabled, Cache.wipeLog, getDataFolder());
         if (ok) {
@@ -129,7 +135,8 @@ public class Infestations extends JavaPlugin {
             "config.yml",
             "messages.yml",
             "groups.yml",
-            "rewards.yml"
+            "rewards.yml",
+            "wildlife.yml"
         };
         for (String path : defaultFiles) {
             copyResourceIfMissing(path);

@@ -1,0 +1,78 @@
+# Ambient sea creatures spawned near players (MythicMobs mobs and vanilla fish).
+# This replaces MythicMobs' LEGACY random spawns (randomspawns/OceanAnimals.yml), which copied whole
+# chunks every tick. Use one or the other: with this on, set MythicMobs config-spawning.yml
+# "Generator: NONE" and remove the ADD entries from OceanAnimals.yml.
+enabled: true
+worlds: [TFMC_Map]
+
+# Each player in survival or adventure gets one try this often.
+interval-seconds: 10
+# A try samples this many random columns in this ring around the player (blocks) and spawns at
+# most one creature, in the first column whose top block is water and that fits a rule.
+ring-min: 24
+ring-max: 64
+attempts: 12
+# No try while this many creatures from this file are within player-cap-radius of the player.
+player-cap: 6
+player-cap-radius: 64
+# Creatures with no player within this distance are removed (checked every 10 seconds). They are
+# never saved with their chunk.
+despawn-distance: 96
+
+# Each rule spawns one kind:
+#   mythic-mob: <MythicMobs mob id>   or   entity: <vanilla entity type>   (exactly one)
+#   biomes: biome names (DEEP_OCEAN or minecraft:deep_ocean)
+#   min-y / max-y: height band of the spawn block (default 50 / 64); it spawns 2 blocks under the
+#     water surface, or 1 block above the floor in shallower water
+#   min-depth: water blocks needed above the floor (default 2)
+#   chance: chance to spawn when a try picks this rule (default 1.0)
+#   cooldown-seconds: server-wide wait between two spawns of this rule (default 30)
+#   max-nearby / nearby-radius: no spawn while this many of this rule are within the radius
+#     (default 1 / 64)
+rules:
+  oarfish:
+    mythic-mob: Oarfish
+    biomes: [DEEP_OCEAN]
+    min-depth: 3
+  jellyfish:
+    mythic-mob: Jellyfish
+    biomes: [OCEAN, DEEP_OCEAN, LUKEWARM_OCEAN, WARM_OCEAN]
+  piranha:
+    mythic-mob: Piranha
+    biomes: [RIVER, BEACH]
+  manta:
+    mythic-mob: Manta
+    biomes: [OCEAN, DEEP_OCEAN, LUKEWARM_OCEAN, WARM_OCEAN]
+    min-depth: 3
+    nearby-radius: 128
+  shark:
+    mythic-mob: Shark
+    biomes: [OCEAN, DEEP_OCEAN, LUKEWARM_OCEAN, WARM_OCEAN]
+    min-depth: 3
+    nearby-radius: 128
+  orca:
+    mythic-mob: Orca
+    biomes: [DEEP_OCEAN, COLD_OCEAN, DEEP_COLD_OCEAN]
+    min-depth: 3
+    nearby-radius: 128
+  cod:
+    entity: COD
+    biomes: [OCEAN, DEEP_OCEAN, COLD_OCEAN, DEEP_COLD_OCEAN]
+    max-nearby: 3
+    nearby-radius: 32
+  salmon:
+    entity: SALMON
+    biomes: [RIVER, BEACH, COLD_OCEAN, DEEP_COLD_OCEAN]
+    max-nearby: 3
+    nearby-radius: 32
+  tropical_fish:
+    entity: TROPICAL_FISH
+    biomes: [LUKEWARM_OCEAN, WARM_OCEAN]
+    max-nearby: 3
+    nearby-radius: 32
+  pufferfish:
+    entity: PUFFERFISH
+    biomes: [LUKEWARM_OCEAN, WARM_OCEAN]
+  squid:
+    entity: SQUID
+    biomes: [OCEAN, DEEP_OCEAN, LUKEWARM_OCEAN, WARM_OCEAN]
