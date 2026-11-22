@@ -301,9 +301,13 @@ class WildlifeServiceTest {
         when(mythic.getMobManager().getMythicMob("Shark")).thenReturn(Optional.empty());
         service.tick(); service.tick();
         verify(logger, times(1)).warning("[Infestations] Unknown Mythic mob in wildlife.yml: Shark");
+        verify(mythic.getMobManager(), times(1)).getMythicMob("Shark");
 
         MythicMob shark = mock(MythicMob.class);
         when(mythic.getMobManager().getMythicMob("Shark")).thenReturn(Optional.of(shark));
+        service.tick();
+        verify(shark, never()).spawn(any(AbstractLocation.class), anyDouble());
+        WildlifeConfig.rules = List.of(WildlifeConfig.rules.get(0));
         when(shark.spawn(any(AbstractLocation.class), eq(1.0))).thenReturn(null);
         service.tick();
         ActiveMob active = mock(ActiveMob.class);
@@ -318,11 +322,28 @@ class WildlifeServiceTest {
         verify(shark, times(3)).spawn(any(AbstractLocation.class), eq(1.0));
     }
 
-    @Test void failedVanillaSpawnIsNotTracked() {
+    @Test void failedOrCancelledVanillaSpawnIsNotTrackedAndSpendsNoCooldown() {
+        WildlifeConfig.intervalTicks = 20; WildlifeConfig.attempts = 1;
         player(GameMode.SURVIVAL, 0, 0);
         when(world.spawnEntity(any(Location.class), any(EntityType.class))).thenReturn(null);
         service.tick();
+        LivingEntity cancelled = creature(); when(cancelled.isValid()).thenReturn(false);
+        when(world.spawnEntity(any(Location.class), any(EntityType.class))).thenReturn(cancelled);
+        service.tick();
         assertEquals(0, service.tracked());
+        nextVanilla();
+        service.tick();
+        assertEquals(1, service.tracked());
+        verify(world, times(3)).spawnEntity(any(Location.class), any(EntityType.class));
+    }
+
+    @Test void playersFarAboveTheWaterGetNoSpawns() {
+        player(GameMode.SURVIVAL, 0, 0);
+        when(players.get(0).getLocation()).thenReturn(new Location(world, 0, 200, 0));
+        service.tick();
+        verify(world, times(3)).isChunkLoaded(anyInt(), anyInt());
+        verify(world, never()).getBiome(anyInt(), anyInt(), anyInt());
+        verify(world, never()).spawnEntity(any(Location.class), any(EntityType.class));
     }
 
     @Test void sweepForgetsGoneCreaturesAndRemovesThoseNoPlayerIsNear() throws Exception {

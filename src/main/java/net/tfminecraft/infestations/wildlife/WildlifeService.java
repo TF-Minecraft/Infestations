@@ -47,6 +47,7 @@ public final class WildlifeService {
     private final Map<UUID, Integer> lastTry = new HashMap<>();
     private final Map<String, Integer> lastSpawn = new HashMap<>();
     private final Set<String> warned = new HashSet<>();
+    private List<WildlifeRule> knownRules;
     private BukkitTask task;
     private int tick;
 
@@ -84,6 +85,11 @@ public final class WildlifeService {
             lastTry.clear();
             return;
         }
+        if (WildlifeConfig.rules != knownRules) {
+            // A reload may have fixed a Mythic mob name or the mob packs, so try unknown mobs again.
+            knownRules = WildlifeConfig.rules;
+            warned.clear();
+        }
         Set<UUID> online = new HashSet<>();
         for (Player player : Bukkit.getOnlinePlayers()) {
             online.add(player.getUniqueId());
@@ -115,6 +121,7 @@ public final class WildlifeService {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         double minSq = (double) WildlifeConfig.ringMin * WildlifeConfig.ringMin;
         double maxSq = (double) WildlifeConfig.ringMax * WildlifeConfig.ringMax;
+        double reachSq = (double) WildlifeConfig.despawnDistance * WildlifeConfig.despawnDistance;
         for (int i = 0; i < WildlifeConfig.attempts; i++) {
             double angle = random.nextDouble() * Math.PI * 2;
             double radius = Math.sqrt(minSq + random.nextDouble() * (maxSq - minSq));
@@ -132,10 +139,16 @@ public final class WildlifeService {
                 continue;
             }
             int y = surface - Math.min(2, depth - 1);
+            Location spot = new Location(world, x + 0.5, y, z + 0.5);
+            // A player far above or below the water (flying, deep mines) would see it swept at once.
+            if (spot.distanceSquared(at) > reachSq) {
+                continue;
+            }
             String biome = world.getBiome(x, y, z).getKey().toString();
             List<WildlifeRule> fitting = new ArrayList<>();
             for (WildlifeRule rule : WildlifeConfig.rules) {
-                if (rule.fits(biome, y, depth) && ready(rule)) {
+                if (rule.fits(biome, y, depth) && ready(rule)
+                        && (rule.mythicMob() == null || !warned.contains(rule.mythicMob()))) {
                     fitting.add(rule);
                 }
             }
@@ -143,7 +156,6 @@ public final class WildlifeService {
                 continue;
             }
             WildlifeRule rule = fitting.get(random.nextInt(fitting.size()));
-            Location spot = new Location(world, x + 0.5, y, z + 0.5);
             if (countNear(spot, rule.nearbyRadius(), rule.id()) >= rule.maxNearby()) {
                 continue;
             }
@@ -176,7 +188,8 @@ public final class WildlifeService {
         } else {
             entity = spot.getWorld().spawnEntity(spot, rule.entity());
         }
-        if (entity == null) {
+        // A spawn another plugin cancelled still returns an entity, but not one in the world.
+        if (entity == null || !entity.isValid()) {
             return false;
         }
         entity.getPersistentDataContainer().set(key(), PersistentDataType.STRING, rule.id());
