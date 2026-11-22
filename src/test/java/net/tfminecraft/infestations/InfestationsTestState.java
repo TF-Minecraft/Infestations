@@ -8,12 +8,13 @@ import net.tfminecraft.infestations.reward.PermadeathZones;
 import net.tfminecraft.infestations.reward.RewardConfig;
 import net.tfminecraft.infestations.reward.RewardDrops;
 import net.tfminecraft.infestations.spawn.SpawnLog;
+import net.tfminecraft.infestations.wildlife.WildlifeConfig;
 
 public final class InfestationsTestState implements AutoCloseable {
     private final Map<Field,Object> state = new LinkedHashMap<>();
     public InfestationsTestState() throws Exception {
         for (Class<?> type : List.of(Infestations.class, Cache.class, GroupLoader.class, Messages.class, SpawnLog.class,
-                RewardConfig.class, RewardDrops.class, PermadeathZones.class)) {
+                RewardConfig.class, RewardDrops.class, PermadeathZones.class, WildlifeConfig.class)) {
             for (Field f : type.getDeclaredFields()) {
                 if (!Modifier.isStatic(f.getModifiers())) continue;
                 f.setAccessible(true);

@@ -80,7 +80,7 @@ class InfestationsLifecycleTest {
         assertSame(plugin, Infestations.plugin);
         assertSame(managers.constructed().getFirst(), plugin.getInfestationManager());
         verify(plugin.getInfestationManager()).start();
-        for (String file : List.of("config.yml", "groups.yml", "messages.yml", "rewards.yml")) {
+        for (String file : List.of("config.yml", "groups.yml", "messages.yml", "rewards.yml", "wildlife.yml")) {
             assertTrue(Files.isRegularFile(plugin.getDataFolder().toPath().resolve(file)));
         }
         for (String folder : List.of("Data", "MapAPI", "logs")) {

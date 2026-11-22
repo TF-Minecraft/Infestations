@@ -23,6 +23,11 @@ commits to the fight, and defeats every monster the lure draws in.
   the lure, and that character dies when it next logs in.
 - **Optional spread** — idle infestations can worsen and spread to neighbouring
   land, including across a single water or sea province.
+- **Ocean wildlife** — sea creatures (MythicMobs mobs and vanilla fish) spawn
+  in water near players by biome, height and depth, with per-kind caps and
+  cooldowns (`wildlife.yml`). It replaces MythicMobs' LEGACY random spawns,
+  which copied whole chunks every tick; the creatures are never saved and are
+  removed once no player is near.
 - **Map and persistence** — infestation severity is exported to the
   SimpleFactions map service, and infestation and lure state survive restarts.
 
