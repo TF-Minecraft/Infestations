@@ -143,7 +143,7 @@ public final class WildlifeService {
             if (new Location(world, x + 0.5, surface, z + 0.5).distanceSquared(at) > reachSq) {
                 continue;
             }
-            String biome = world.getBiome(x, surface, z).getKey().toString();
+            String biome = world.getBiome(x, surface - Math.min(2, depth - 1), z).getKey().toString();
             List<WildlifeRule> fitting = new ArrayList<>();
             for (WildlifeRule rule : WildlifeConfig.rules) {
                 if (rule.fits(biome, rule.spawnY(surface, depth), depth) && ready(rule)
@@ -156,7 +156,8 @@ public final class WildlifeService {
             }
             WildlifeRule rule = fitting.get(random.nextInt(fitting.size()));
             Location spot = new Location(world, x + 0.5, rule.spawnY(surface, depth), z + 0.5);
-            if (countNear(spot, rule.nearbyRadius(), rule.id()) >= rule.maxNearby()) {
+            if (spot.distanceSquared(at) > reachSq
+                    || countNear(spot, rule.nearbyRadius(), rule.id()) >= rule.maxNearby()) {
                 continue;
             }
             // One roll per try, so a lower chance means fewer spawns rather than more sampling.

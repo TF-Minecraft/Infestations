@@ -186,6 +186,21 @@ class WildlifeServiceTest {
         verify(logger).info("[Infestations] Wildlife orca at 24,57,0");
     }
 
+    @Test void aDeepSpawnOutOfReachIsSkippedEvenWhenTheSurfaceIsInReach() throws Exception {
+        WildlifeConfig.rules = List.of(rule("orca", "entity: SQUID\nbiomes: [OCEAN]\nbelow-surface: 30\nmin-y: 0\n"));
+        WildlifeConfig.attempts = 1;
+        when(world.getHighestBlockYAt(anyInt(), anyInt(), eq(HeightMap.OCEAN_FLOOR))).thenReturn(20);
+        player(GameMode.SURVIVAL, 0, 0);
+        when(players.get(0).getLocation()).thenReturn(new Location(world, 0, 150, 0));
+        service.tick();
+        verify(world).getBiome(anyInt(), anyInt(), anyInt());
+        verify(world, never()).spawnEntity(any(Location.class), any(EntityType.class));
+        when(players.get(0).getLocation()).thenReturn(new Location(world, 0, 60, 0));
+        nextVanilla();
+        ticks(10);
+        verify(world).spawnEntity(argThat(l -> l.getY() == 33), eq(EntityType.SQUID));
+    }
+
     @Test void sweepRunsEverySweepSeconds() {
         WildlifeConfig.sweepTicks = 40;
         player(GameMode.SURVIVAL, 0, 0);
