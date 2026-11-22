@@ -26,6 +26,10 @@ public record WildlifeRule(String id, String mythicMob, EntityType entity, Set<S
             } catch (IllegalArgumentException ex) {
                 return null;
             }
+            // Players, projectiles and the like can't be spawned this way; reject them at load.
+            if (!entity.isSpawnable() || !entity.isAlive()) {
+                return null;
+            }
         }
         if ((mythicMob == null) == (entity == null)) {
             return null;

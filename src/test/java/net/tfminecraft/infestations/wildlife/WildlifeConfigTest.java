@@ -64,6 +64,9 @@ class WildlifeConfigTest {
         assertNull(rule("biomes: [OCEAN]\n"));
         assertNull(rule("mythic-mob: Shark\nentity: COD\nbiomes: [OCEAN]\n"));
         assertNull(rule("entity: NOT_A_MOB\nbiomes: [OCEAN]\n"));
+        assertNull(rule("entity: PLAYER\nbiomes: [OCEAN]\n"));
+        assertNull(rule("entity: FISHING_BOBBER\nbiomes: [OCEAN]\n"));
+        assertNull(rule("entity: ARROW\nbiomes: [OCEAN]\n"));
         assertNull(rule("entity: COD\n"));
         assertNull(rule("entity: COD\nbiomes: [OCEAN]\nmin-y: 70\nmax-y: 60\n"));
     }
